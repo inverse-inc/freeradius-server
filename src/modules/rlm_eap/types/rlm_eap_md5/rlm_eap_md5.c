@@ -27,9 +27,14 @@ RCSID("$Id$")
 #include <stdlib.h>
 
 #include "eap_md5.h"
+#include "../../serialize.h"
 
 #include <freeradius-devel/rad_assert.h>
 #include <freeradius-devel/md5.h>
+
+MOD_SERIALIZE_FIX_LENGTH(MD5_CHALLENGE_LEN)
+
+MOD_DESERIALIZE_FIX_LENGTH(MD5_CHALLENGE_LEN)
 
 /*
  *	Initiate the EAP-MD5 session by sending a challenge to the peer.
