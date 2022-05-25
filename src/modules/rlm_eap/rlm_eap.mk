@@ -4,3 +4,8 @@ SOURCES		:= rlm_eap.c eap.c mem.c
 SRC_INCDIRS	:= . libeap
 
 TGT_PREREQS	:= libfreeradius-eap.a
+
+ifne "$(WITH_CACHE_EAP)" ""
+SOURCES		+= cache.c
+TGT_LDLIBS	:= -ljson-c
+endif

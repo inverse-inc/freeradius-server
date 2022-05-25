@@ -113,4 +113,12 @@ void	    	generate_key(void);
 VALUE_PAIR  	*generate_state(time_t timestamp);
 int	    	verify_state(VALUE_PAIR *state, time_t timestamp);
 
+#ifdef WITH_CACHE_EAP
+/* Cache */
+REQUEST		*eap_cache_init_fake_request(rlm_eap_t *inst);
+int		eap_cache_save(REQUEST *request, rlm_eap_t *inst, eap_handler_t *handler);
+eap_handler_t	*eap_cache_find(rlm_eap_t *inst, eap_handler_t *handler);
+int		eap_cache_enabled(rlm_eap_t *inst, int type);
+#endif
+
 #endif /*_RLM_EAP_H*/

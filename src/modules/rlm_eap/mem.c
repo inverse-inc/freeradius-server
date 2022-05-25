@@ -291,6 +291,10 @@ int eaplist_add(rlm_eap_t *inst, eap_handler_t *handler)
 	VALUE_PAIR	*state;
 	REQUEST		*request = handler->request;
 
+#ifdef WITH_CACHE_EAP
+	int		cache_enabled = eap_cache_enabled(inst, handler->type);
+#endif
+
 	/*
 	 *	Generate State, since we've been asked to add it to
 	 *	the list.
@@ -308,19 +312,24 @@ int eaplist_add(rlm_eap_t *inst, eap_handler_t *handler)
 	handler->src_ipaddr = request->packet->src_ipaddr;
 	handler->eap_id = handler->eap_ds->request->id;
 
-	/*
-	 *	Playing with a data structure shared among threads
-	 *	means that we need a lock, to avoid conflict.
-	 */
-	PTHREAD_MUTEX_LOCK(&(inst->session_mutex));
+#ifdef WITH_CACHE_EAP
+	if (!cache_enabled)
+#endif
+	{
+		/*
+		 *	Playing with a data structure shared among threads
+		 *	means that we need a lock, to avoid conflict.
+		 */
+		PTHREAD_MUTEX_LOCK(&(inst->session_mutex));
 
-	/*
-	 *	If we have a DoS attack, discard new sessions.
-	 */
-	if (rbtree_num_elements(inst->session_tree) >= inst->max_sessions) {
-		status = -1;
-		eaplist_expire(inst, request, handler->timestamp);
-		goto done;
+		/*
+		 *	If we have a DoS attack, discard new sessions.
+		 */
+		if (rbtree_num_elements(inst->session_tree) >= inst->max_sessions) {
+			status = -1;
+			eaplist_expire(inst, request, handler->timestamp);
+			goto done;
+		}
 	}
 
 	/*
@@ -351,25 +360,32 @@ int eaplist_add(rlm_eap_t *inst, eap_handler_t *handler)
 
 	fr_pair_value_memcpy(state, handler->state, sizeof(handler->state));
 
-	/*
-	 *	Big-time failure.
-	 */
-	status = rbtree_insert(inst->session_tree, handler);
+#ifdef WITH_CACHE_EAP
+	if (cache_enabled) {
+		status = eap_cache_save(request, inst, handler);
+	} else
+#endif
+	{
+		/*
+		 *	Big-time failure.
+		 */
+		status = rbtree_insert(inst->session_tree, handler);
+		if (status) {
+			eap_handler_t *prev;
 
-	if (status) {
-		eap_handler_t *prev;
-
-		prev = inst->session_tail;
-		if (prev) {
-			prev->next = handler;
-			handler->prev = prev;
-			handler->next = NULL;
-			inst->session_tail = handler;
-		} else {
-			inst->session_head = inst->session_tail = handler;
-			handler->next = handler->prev = NULL;
+			prev = inst->session_tail;
+			if (prev) {
+				prev->next = handler;
+				handler->prev = prev;
+				handler->next = NULL;
+				inst->session_tail = handler;
+			} else {
+				inst->session_head = inst->session_tail = handler;
+				handler->next = handler->prev = NULL;
+			}
 		}
 	}
+
 
 	/*
 	 *	Now that we've finished mucking with the list,
@@ -382,7 +398,10 @@ int eaplist_add(rlm_eap_t *inst, eap_handler_t *handler)
 	 */
 	if (status > 0) handler->request = NULL;
 
-	PTHREAD_MUTEX_UNLOCK(&(inst->session_mutex));
+#ifdef WITH_CACHE_EAP
+	if (!cache_enabled)
+#endif
+		PTHREAD_MUTEX_UNLOCK(&(inst->session_mutex));
 
 	if (status <= 0) {
 		fr_pair_delete_by_num(&request->reply->vps, PW_STATE, 0, TAG_ANY);
@@ -444,16 +463,23 @@ eap_handler_t *eaplist_find(rlm_eap_t *inst, REQUEST *request,
 	myHandler.eap_id = eap_packet->id;
 	memcpy(myHandler.state, state->vp_strvalue, sizeof(myHandler.state));
 
-	/*
-	 *	Playing with a data structure shared among threads
-	 *	means that we need a lock, to avoid conflict.
-	 */
-	PTHREAD_MUTEX_LOCK(&(inst->session_mutex));
+#ifdef WITH_CACHE_EAP
+	if (eap_cache_enabled(inst, eap_packet->data[0])) {
+		handler = eap_cache_find(inst, &myHandler);
+	} else
+#endif
+	{
+		/*
+		 *	Playing with a data structure shared among threads
+		 *	means that we need a lock, to avoid conflict.
+		 */
+		PTHREAD_MUTEX_LOCK(&(inst->session_mutex));
 
-	eaplist_expire(inst, request, request->timestamp);
+		eaplist_expire(inst, request, request->timestamp);
 
-	handler = eaplist_delete(inst, request, &myHandler);
-	PTHREAD_MUTEX_UNLOCK(&(inst->session_mutex));
+		handler = eaplist_delete(inst, request, &myHandler);
+		PTHREAD_MUTEX_UNLOCK(&(inst->session_mutex));
+	}
 
 	/*
 	 *	Might not have been there.
