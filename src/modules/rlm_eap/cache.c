@@ -50,7 +50,6 @@ int eap_cache_enabled(rlm_eap_t *inst, int type)
 	return inst->cache_virtual_server && module && module->type->deserialize && module->type->serialize;
 }
 
-
 static json_object *eap_packet_t_to_obj(eap_packet_t *pkt)
 {
 	struct json_object *obj, *val;
@@ -211,6 +210,7 @@ static int obj_to_eap_packet_t(json_object *obj, eap_packet_t *pkt)
 	}
 	
 	pkt->type.num = json_object_get_int64(val);
+
 	return 1;
 }
 
@@ -340,6 +340,7 @@ error:
 
 	handler->status = json_object_get_int64(obj);
 	json_tokener_free(token);
+
 	return 1;
 }
 
@@ -379,13 +380,14 @@ int eap_cache_save(REQUEST *request, rlm_eap_t *inst, eap_handler_t *handler)
 	(void) process_post_auth(CACHE_SAVE, fake);
 
 	talloc_free(fake);
+
 	return 1;
 }
 
 eap_handler_t *eap_cache_find(rlm_eap_t *inst, eap_handler_t *handler)
 {
 	REQUEST *request = eap_cache_init_fake_request(inst);
-	eap_handler_t *new_handler;
+	eap_handler_t *new_handler = NULL;
 
 	if (!request) return NULL;
 
@@ -411,27 +413,34 @@ eap_handler_t *eap_cache_find(rlm_eap_t *inst, eap_handler_t *handler)
 	return new_handler;
 }
 
-int serialize_fixed(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len) {
+int serialize_fixed(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len)
+{
 	VALUE_PAIR *vp;
+
 	vp = fr_pair_afrom_num(fake->reply, PW_EAP_SERIALIZED_OPAQUE, 0);
 	fr_pair_value_memcpy(vp, handler->opaque, len);
 	fr_pair_add(&fake->reply->vps, vp);
+
 	return 1;
 }
 
-int deserialize_fixed(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len) {
+int deserialize_fixed(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len)
+{
 	VALUE_PAIR *vp;
 	uint8_t * p;
+
 	vp = fr_pair_find_by_num(fake->reply->vps, PW_EAP_SERIALIZED_OPAQUE, 0, TAG_ANY);
 	if (!vp) return 0;
     if ( vp->vp_length != len) return 0;
 	p = talloc_memdup(handler, vp->vp_octets, vp->vp_length);
 	if (!p) return 0;
 	handler->opaque = p;
+
 	return 1;
 }
 
-int serialize_noop(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len) {
+int serialize_noop(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len)
+{
 	return 1;
 }
 
