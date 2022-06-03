@@ -23,7 +23,6 @@
 
 #ifdef WITH_CACHE_EAP
 #include "rlm_eap.h"
-#include "serialize.h"
 #include <json-c/json.h>
 
 #define CACHE_SAVE (1)
@@ -47,7 +46,7 @@ int eap_cache_enabled(rlm_eap_t *inst, int type)
 {
 	eap_module_t *module = inst->methods[type];
 
-	return inst->cache_virtual_server && module && module->type->deserialize && module->type->serialize;
+	return inst->cache_virtual_server && ( type == PW_EAP_NAK || (module && module->type->deserialize && module->type->serialize ) );
 }
 
 static json_object *eap_packet_t_to_obj(eap_packet_t *pkt)
@@ -154,6 +153,10 @@ static int serialized_handler(REQUEST *request, REQUEST *fake, UNUSED rlm_eap_t 
 	if (handler->eap_ds) {
 		json_object_object_add(obj, "eap_ds", eap_ds_to_obj(handler->eap_ds));
 	}
+	
+	if (handler->certs) {
+		json_object_object_add(obj, "cert", json_object_new_array());
+	}
 
 	json_str = json_object_to_json_string_length(obj, 0, &len);
 	vp = fr_pair_afrom_num(fake->reply, PW_EAP_SERIALIZED_HANDLER, 0);
@@ -246,7 +249,7 @@ static int deserialized_handler(REQUEST *request, REQUEST *fake, UNUSED rlm_eap_
 	const char* str;
 	size_t len;
 	enum json_tokener_error err;
-	json_tokener* token;
+	json_tokener *token;
 
 	vp = fr_pair_find_by_num(fake->reply->vps, PW_EAP_SERIALIZED_HANDLER, 0, TAG_ANY);
 	if (!vp) {
@@ -316,7 +319,7 @@ error:
 	}\
 	num = json_object_get_int64(val);\
 	handler->f = num;\
-	RDEBUG("Setting " #f "with %ld ", num);\
+	RDEBUG("Setting " #f " with %ld", num);\
 } while(0)
 
 #define SET_BOOL(f) do {\
@@ -324,8 +327,8 @@ error:
 		RERROR("Cannot find " #f);\
 		goto error;\
 	}\
-	\
 	handler->f = json_object_get_boolean(val);\
+	RDEBUG("Setting " #f " with %d", handler->f);\
 } while(0)
 
 	SET_INT(eap_id);
@@ -337,8 +340,6 @@ error:
 	SET_BOOL(tls);
 	SET_BOOL(started);
 	SET_BOOL(finished);
-
-	handler->status = json_object_get_int64(obj);
 	json_tokener_free(token);
 
 	return 1;
@@ -359,21 +360,26 @@ static int add_state(REQUEST *fake, eap_handler_t *handler)
 
 int eap_cache_save(REQUEST *request, rlm_eap_t *inst, eap_handler_t *handler)
 {
+	eap_module_t *method;
 	REQUEST *fake = eap_cache_init_fake_request(inst);
 
 	if (!fake) return 0;
 
 	if (!add_state(fake, handler)) {
+		RDEBUG("Cannot add state");
 	error:
 		talloc_free(fake);
 		return -1;
 	}
 
 	if (!serialized_handler(request, fake, inst, handler)) {
+		RDEBUG("Cannot serialize handler");
 		goto error;
 	}
 
-	if (!inst->methods[handler->type]->type->serialize(inst, fake, handler)) {
+	method = inst->methods[handler->type];
+	if (!method->type->serialize(request, method->instance, fake, handler)) {
+		RDEBUG("Cannot serialize additional %s", method->name);
 		goto error;
 	}
 
@@ -384,64 +390,34 @@ int eap_cache_save(REQUEST *request, rlm_eap_t *inst, eap_handler_t *handler)
 	return 1;
 }
 
-eap_handler_t *eap_cache_find(rlm_eap_t *inst, eap_handler_t *handler)
+eap_handler_t *eap_cache_find(REQUEST *request, rlm_eap_t *inst, eap_handler_t *handler)
 {
-	REQUEST *request = eap_cache_init_fake_request(inst);
+	eap_module_t *method;
+	REQUEST *fake = eap_cache_init_fake_request(inst);
 	eap_handler_t *new_handler = NULL;
 
-	if (!request) return NULL;
+	if (!fake) return NULL;
 
-	if (!add_state(request, handler)) {
+	if (!add_state(fake, handler)) {
 	error:
 		talloc_free(new_handler);
-		talloc_free(request);
+		talloc_free(fake);
 		return NULL;
 	}
 
-	(void) process_post_auth(CACHE_LOAD, request);
+	(void) process_post_auth(CACHE_LOAD, fake);
 
 	new_handler = eap_handler_alloc(inst);
-	if (!deserialized_handler(request, request, inst, new_handler)) {
+	if (!deserialized_handler(request, fake, inst, new_handler)) {
 		RERROR("Failed to deserialize request");
 		goto error;
 	}
 	
-	if (!inst->methods[new_handler->type]->type->deserialize(inst, request, new_handler)) {
+	method = inst->methods[new_handler->type];
+	if (!method->type->deserialize(request, method->instance, fake, new_handler)) {
 		goto error;
 	}
 
 	return new_handler;
 }
-
-int serialize_fixed(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len)
-{
-	VALUE_PAIR *vp;
-
-	vp = fr_pair_afrom_num(fake->reply, PW_EAP_SERIALIZED_OPAQUE, 0);
-	fr_pair_value_memcpy(vp, handler->opaque, len);
-	fr_pair_add(&fake->reply->vps, vp);
-
-	return 1;
-}
-
-int deserialize_fixed(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len)
-{
-	VALUE_PAIR *vp;
-	uint8_t * p;
-
-	vp = fr_pair_find_by_num(fake->reply->vps, PW_EAP_SERIALIZED_OPAQUE, 0, TAG_ANY);
-	if (!vp) return 0;
-    if ( vp->vp_length != len) return 0;
-	p = talloc_memdup(handler, vp->vp_octets, vp->vp_length);
-	if (!p) return 0;
-	handler->opaque = p;
-
-	return 1;
-}
-
-int serialize_noop(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len)
-{
-	return 1;
-}
-
 #endif
