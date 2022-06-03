@@ -7,4 +7,10 @@ endif
 
 SRC_CFLAGS	:= -DEAPLIB
 
+ifneq "$(WITH_CACHE_EAP)" ""
+SOURCES		+= serialize.c
+TGT_LDLIBS	:= -ljson-c
+SRC_CFLAGS  += -DWITH_CACHE_EAP
+endif
+
 SRC_INCDIRS	:= . ..
