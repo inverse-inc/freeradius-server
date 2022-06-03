@@ -25,6 +25,7 @@ RCSID("$Id$")
 USES_APPLE_DEPRECATED_API	/* OpenSSL API has been deprecated by Apple */
 
 #include "eap_ttls.h"
+#include <json-c/json.h>
 
 typedef struct rlm_eap_ttls_t {
 	/*
@@ -379,6 +380,131 @@ done:
 	return ret;
 }
 
+static int serialize_ttls_tunnel(UNUSED REQUEST* request, UNUSED void *instance, UNUSED REQUEST *fake, ttls_tunnel_t *tunnel)
+{
+	json_object *obj, *val;
+	size_t len;
+	const char *json_str;
+	VALUE_PAIR *vp = NULL;
+
+	if (!tunnel) return 1;
+
+	MEM(obj = json_object_new_object());
+
+#define SET_BOOL(n) do {\
+	MEM(val = json_object_new_boolean((tunnel->n)));\
+	json_object_object_add(obj, #n, val);\
+} while(0)
+
+#define SET_INT(n) do {\
+	MEM(val = json_object_new_int64((tunnel->n)));\
+	json_object_object_add(obj, #n, val);\
+} while(0)
+	
+	if (tunnel->username) {
+		MEM(val = json_object_new_string_len(tunnel->username->vp_strvalue, tunnel->username->vp_length));
+		json_object_object_add(obj, "username", val);
+	}
+
+	SET_BOOL(authenticated);
+	SET_BOOL(use_tunneled_reply);
+	SET_BOOL(copy_request_to_tunnel);
+	SET_INT(default_method);
+#undef SET_BOOL
+#undef SET_INT
+	json_str = json_object_to_json_string_length(obj, 0, &len);
+	vp = fr_pair_afrom_num(fake->reply, PW_EAP_SERIALIZED_TLS_OPAQUE, 0);
+	if (!vp) {
+		json_object_put(obj);
+		return 0;
+	}
+
+	fr_pair_value_memcpy(vp, (const uint8_t *) json_str, len);
+	fr_pair_add(&(fake->reply->vps), vp);
+	json_object_put(obj);
+
+	return 1;
+}
+
+static int mod_serialize(REQUEST *request, UNUSED void *instance, REQUEST *fake, eap_handler_t *handler)
+{
+	json_object *obj = NULL;
+	size_t len;
+	const char *json_str;
+	VALUE_PAIR *vp = NULL;
+	tls_session_t *ssn = (tls_session_t *) handler->opaque;
+
+	MEM(obj = json_object_new_object());
+	serialize_tls_session(request, instance, fake, obj, ssn);
+	json_str = json_object_to_json_string_length(obj, 0, &len);
+	vp = fr_pair_afrom_num(fake->reply, PW_EAP_SERIALIZED_OPAQUE, 0);
+	if (!vp) {
+		json_object_put(obj);
+		return 0;
+	}
+
+	RDEBUG("Serializing Opaque: %s\n", json_str);
+	fr_pair_value_memcpy(vp, (const uint8_t *) json_str, len);
+	fr_pair_add(&(fake->reply->vps), vp);
+	json_object_put(obj);
+	fr_pair_add(&(fake->reply->vps), vp);
+	json_object_put(obj);
+
+	return serialize_ttls_tunnel(request, instance, fake, (ttls_tunnel_t *) ssn->opaque);
+}
+
+static int deserialize_ttls_tunnel(UNUSED void *instance, REQUEST *fake, json_object *obj, ttls_tunnel_t *ssn)
+{
+	return 1;
+}
+
+static int mod_deserialize(REQUEST *request, void *instance, REQUEST *fake, eap_handler_t *handler)
+{
+	VALUE_PAIR *vp = NULL;
+	json_object *obj;
+	json_tokener *token;
+	enum json_tokener_error err;
+	tls_session_t *ssn = NULL;
+	rlm_eap_ttls_t *inst = (rlm_eap_ttls_t *) instance;
+
+	vp = fr_pair_find_by_num(fake->reply->vps, PW_EAP_SERIALIZED_OPAQUE, 0, TAG_ANY);
+	if (!vp) {
+		RERROR("Cannot find EAP-Serialized-Opaque");
+		return 0;
+	}
+
+	RDEBUG("Deserializing Opaque: %*s\n", (int) vp->vp_length, vp->vp_octets);
+	MEM(token = json_tokener_new());
+	obj = json_tokener_parse_ex(token, (const char*) vp->vp_octets, vp->vp_length);
+	err = json_tokener_get_error(token);
+
+	if (err != json_tokener_success) {
+		RERROR("Error EAP-Serialized-Opaque: %s %d", json_tokener_error_desc(err), err);
+error:
+		json_tokener_free(token);
+		return 0;
+	}
+
+	/*
+	if ((ssn = tls_new_session(handler, inst->tls_conf, request, false, false)) == NULL) {
+		goto error;
+	}
+	*/
+
+	if (!deserialize_tls_session(request, instance, fake, obj, ssn)) {
+		goto error;
+	}
+
+	if (!deserialize_ttls_tunnel(instance, fake, obj, (ttls_tunnel_t *) ssn->opaque)) {
+		goto error;
+	}
+
+	ssn->label = "ttls keying material";
+	handler->opaque = ssn;
+
+	return 1;
+}
+
 /*
  *	The module name should be the only globally exported symbol.
  *	That is, everything else should be 'static'.
@@ -388,5 +514,7 @@ rlm_eap_module_t rlm_eap_ttls = {
 	.name		= "eap_ttls",
 	.instantiate	= mod_instantiate,	/* Create new submodule instance */
 	.session_init	= mod_session_init,	/* Initialise a new EAP session */
-	.process	= mod_process		/* Process next round of EAP method */
+	.process	= mod_process,		/* Process next round of EAP method */
+	.serialize  = mod_serialize,
+	.deserialize  = mod_deserialize,
 };
