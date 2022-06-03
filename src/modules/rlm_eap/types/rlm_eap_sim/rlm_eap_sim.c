@@ -31,9 +31,9 @@ RCSID("$Id$")
 #include <stdlib.h>
 
 #include "../../eap.h"
-#include "../../serialize.h"
 #include "eap_types.h"
 #include "eap_sim.h"
+#include "eap_tls.h"
 #include "comp128.h"
 
 #include <freeradius-devel/rad_assert.h>
@@ -43,14 +43,6 @@ typedef struct eap_sim_server_state {
 	struct eapsim_keys keys;
 	int  sim_id;
 } eap_sim_state_t;
-
-static int mod_serialize(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler) {
-	return serialize_fixed(instance, fake, handler, sizeof(eap_sim_state_t));
-}
-
-static int mod_deserialize(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler) {
-	return deserialize_fixed(instance, fake, handler, sizeof(eap_sim_state_t));
-}
 
 static int eap_sim_sendstart(eap_handler_t *handler)
 {
@@ -692,6 +684,14 @@ static int mod_process(UNUSED void *arg, eap_handler_t *handler)
 	}
 
 	return 0;
+}
+
+static int mod_serialize(UNUSED REQUEST *request, void *instance, REQUEST *fake, eap_handler_t *handler) {
+	return serialize_fixed(instance, fake, handler, sizeof(eap_sim_state_t));
+}
+
+static int mod_deserialize(UNUSED REQUEST *request, void *instance, REQUEST *fake, eap_handler_t *handler) {
+	return deserialize_fixed(instance, fake, handler, sizeof(eap_sim_state_t));
 }
 
 /*
