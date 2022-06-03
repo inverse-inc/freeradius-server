@@ -26,7 +26,7 @@ RCSID("$Id$")
 #include <stdlib.h>
 
 #include "eap.h"
-#include "../../serialize.h"
+#include "eap_tls.h"
 
 #include <freeradius-devel/rad_assert.h>
 
@@ -238,6 +238,11 @@ static int CC_HINT(nonnull) mod_process(void *instance, eap_handler_t *handler)
 	return 1;
 }
 
+static int serialize_noop(UNUSED REQUEST *request, UNUSED void *instance, UNUSED REQUEST *fake, UNUSED eap_handler_t *handler)
+{
+	return 1;
+}
+
 /*
  *	The module name should be the only globally exported symbol.
  *	That is, everything else should be 'static'.
@@ -248,6 +253,6 @@ rlm_eap_module_t rlm_eap_gtc = {
 	.instantiate	= mod_instantiate,	/* Create new submodule instance */
 	.session_init	= mod_session_init,	/* Initialise a new EAP session */
 	.process	= mod_process,		/* Process next round of EAP method */
-	.mod_deserialize  = serialize_noop,
-	.mod_serialize	= serialize_noop,
+	.deserialize  = serialize_noop,
+	.serialize	= serialize_noop,
 };
