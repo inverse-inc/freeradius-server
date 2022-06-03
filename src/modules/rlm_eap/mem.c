@@ -465,7 +465,7 @@ eap_handler_t *eaplist_find(rlm_eap_t *inst, REQUEST *request,
 
 #ifdef WITH_CACHE_EAP
 	if (eap_cache_enabled(inst, eap_packet->data[0])) {
-		handler = eap_cache_find(inst, &myHandler);
+		handler = eap_cache_find(request, inst, &myHandler);
 	} else
 #endif
 	{
