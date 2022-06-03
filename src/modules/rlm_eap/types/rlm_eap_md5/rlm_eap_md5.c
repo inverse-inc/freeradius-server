@@ -27,19 +27,10 @@ RCSID("$Id$")
 #include <stdlib.h>
 
 #include "eap_md5.h"
-#include "../../serialize.h"
+#include "eap_tls.h"
 
 #include <freeradius-devel/rad_assert.h>
 #include <freeradius-devel/md5.h>
-
-static int mod_serialize(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler) {
-	return serialize_fixed(instance, fake, handler, sizeof(MD5_CHALLENGE_LEN));
-}
-
-static int mod_deserialize(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler) {
-	return deserialize_fixed(instance, fake, handler, sizeof(MD5_CHALLENGE_LEN));
-}
-
 
 /*
  *	Initiate the EAP-MD5 session by sending a challenge to the peer.
@@ -166,34 +157,13 @@ static int mod_process(UNUSED void *arg, eap_handler_t *handler)
 	return 1;
 }
 
-static int mod_serialize(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler)
-{
-	VALUE_PAIR *vp;
-
-	vp = fr_pair_afrom_num(fake->reply, PW_EAP_SERIALIZED_OPAQUE, 0);
-	fr_pair_value_memcpy(vp, handler->opaque, MD5_CHALLENGE_LEN);
-	fr_pair_add(&fake->reply->vps, vp);
-
-	return 1;
+static int mod_serialize(UNUSED REQUEST *request, void *instance, REQUEST *fake, eap_handler_t *handler) {
+	return serialize_fixed(instance, fake, handler, MD5_CHALLENGE_LEN);
 }
 
-static int mod_deserialize(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler)
-{
-	VALUE_PAIR *vp;
-	uint8_t * p;
-
-	vp = fr_pair_find_by_num(fake->reply->vps, PW_EAP_SERIALIZED_OPAQUE, 0, TAG_ANY);
-	if (!vp) return 0;
-
-	if (vp->vp_length != MD5_CHALLENGE_LEN) return 0;
-
-	p = talloc_memdup(handler, vp->vp_octets, vp->vp_length);
-	if (!p) return 0;
-
-	handler->opaque = p;
-	return 1;
+static int mod_deserialize(UNUSED REQUEST *request, void *instance, REQUEST *fake, eap_handler_t *handler) {
+	return deserialize_fixed(instance, fake, handler, MD5_CHALLENGE_LEN);
 }
-
 
 /*
  *	The module name should be the only globally exported symbol.
