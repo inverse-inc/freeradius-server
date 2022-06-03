@@ -419,6 +419,7 @@ static int serialize_ttls_tunnel(UNUSED REQUEST* request, UNUSED void *instance,
 		return 0;
 	}
 
+	RDEBUG("Serializing Tls Opaque: %s\n", json_str);
 	fr_pair_value_memcpy(vp, (const uint8_t *) json_str, len);
 	fr_pair_add(&(fake->reply->vps), vp);
 	json_object_put(obj);
@@ -445,8 +446,6 @@ static int mod_serialize(REQUEST *request, UNUSED void *instance, REQUEST *fake,
 
 	RDEBUG("Serializing Opaque: %s\n", json_str);
 	fr_pair_value_memcpy(vp, (const uint8_t *) json_str, len);
-	fr_pair_add(&(fake->reply->vps), vp);
-	json_object_put(obj);
 	fr_pair_add(&(fake->reply->vps), vp);
 	json_object_put(obj);
 
