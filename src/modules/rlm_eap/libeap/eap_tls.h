@@ -38,13 +38,16 @@ USES_APPLE_DEPRECATED_API	/* OpenSSL API has been deprecated by Apple */
 #include <netdb.h>
 #include <fcntl.h>
 #include <signal.h>
-
 #include <ctype.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
 
 #ifdef HAVE_UNISTD_H
 #  include <unistd.h>
+#endif
+
+#ifdef WITH_CACHE_EAP
+#include <json-c/json.h>
 #endif
 
 #include <freeradius-devel/radiusd.h>
@@ -105,5 +108,13 @@ int		eaptls_start(EAP_DS *eap_ds, int peap);
 int		eaptls_compose(EAP_DS *eap_ds, EAPTLS_PACKET *reply);
 
 fr_tls_server_conf_t *eaptls_conf_parse(CONF_SECTION *cs, char const *key);
+
+#ifdef WITH_CACHE_EAP
+int serialize_fixed(void *instance, REQUEST *fake, eap_handler_t *handler, size_t len);
+int deserialize_fixed(void *instance, REQUEST *fake, eap_handler_t *handler, size_t len);
+int serialize_noop(REQUEST *request, void *instance, REQUEST *fake, eap_handler_t *handler);
+int serialize_tls_session(REQUEST *request, void *instance, REQUEST *fake, json_object *obj, tls_session_t *ssn);
+int deserialize_tls_session(REQUEST *request, void *instance, REQUEST *fake, json_object *obj, tls_session_t *ssn);
+#endif
 
 #endif /*_EAP_TLS_H*/
