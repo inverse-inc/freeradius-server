@@ -379,7 +379,7 @@ int eap_cache_save(REQUEST *request, rlm_eap_t *inst, eap_handler_t *handler)
 
 	method = inst->methods[handler->type];
 	if (!method->type->serialize(request, method->instance, fake, handler)) {
-		RDEBUG("Cannot serialize additional %s", method->name);
+		RDEBUG("Cannot serialize %s", method->name);
 		goto error;
 	}
 
@@ -415,6 +415,7 @@ eap_handler_t *eap_cache_find(REQUEST *request, rlm_eap_t *inst, eap_handler_t *
 	
 	method = inst->methods[new_handler->type];
 	if (!method->type->deserialize(request, method->instance, fake, new_handler)) {
+		RDEBUG("Failed to deserialize %s", method->name);
 		goto error;
 	}
 
