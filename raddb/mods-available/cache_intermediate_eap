@@ -48,7 +48,8 @@ cache cache_intermediate_eap {
 	#  Cache the serialized EAP data.
 	#
 	update reply {
-		&reply:EAP-Serialized-Handler := &reply:EAP-Serialized-Handler
-		&reply:EAP-Serialized-Opaque  := &reply:EAP-Serialized-Opaque
+		&reply:EAP-Serialized-Handler  := &reply:EAP-Serialized-Handler
+		&reply:EAP-Serialized-Opaque   := &reply:EAP-Serialized-Opaque
+		&reply:EAP-Serialized-Tls-Opaque  := &reply:EAP-Serialized-Tls-Opaque
 	}
 }
