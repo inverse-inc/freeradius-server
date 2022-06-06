@@ -396,22 +396,13 @@ static int serialize_ttls_tunnel(UNUSED REQUEST* request, UNUSED void *instance,
 	json_object_object_add(obj, #n, val);\
 } while(0)
 
-#define SET_INT(n) do {\
-	MEM(val = json_object_new_int64((tunnel->n)));\
-	json_object_object_add(obj, #n, val);\
-} while(0)
-	
 	if (tunnel->username) {
 		MEM(val = json_object_new_string_len(tunnel->username->vp_strvalue, tunnel->username->vp_length));
 		json_object_object_add(obj, "username", val);
 	}
 
 	SET_BOOL(authenticated);
-	SET_BOOL(use_tunneled_reply);
-	SET_BOOL(copy_request_to_tunnel);
-	SET_INT(default_method);
 #undef SET_BOOL
-#undef SET_INT
 	json_str = json_object_to_json_string_length(obj, 0, &len);
 	vp = fr_pair_afrom_num(fake->reply, PW_EAP_SERIALIZED_TLS_OPAQUE, 0);
 	if (!vp) {
@@ -452,8 +443,44 @@ static int mod_serialize(REQUEST *request, UNUSED void *instance, REQUEST *fake,
 	return serialize_ttls_tunnel(request, instance, fake, (ttls_tunnel_t *) ssn->opaque);
 }
 
-static int deserialize_ttls_tunnel(UNUSED void *instance, REQUEST *fake, json_object *obj, ttls_tunnel_t *ssn)
+static int deserialize_ttls_tunnel(REQUEST *request, UNUSED void *instance, REQUEST *fake, tls_session_t *ssn)
 {
+	VALUE_PAIR *vp = NULL;
+	json_object *obj, *val;
+	json_tokener *token;
+	enum json_tokener_error err;
+	rlm_eap_ttls_t *inst = instance;
+	ttls_tunnel_t *t = NULL;
+
+	vp = fr_pair_find_by_num(fake->reply->vps, PW_EAP_SERIALIZED_TLS_OPAQUE, 0, TAG_ANY);
+	if (!vp) {
+		return 1;
+	}
+
+	t = ttls_alloc(ssn, (rlm_eap_ttls_t *) inst);
+	RDEBUG("Deserializing Opaque: %*s\n", (int) vp->vp_length, vp->vp_octets);
+	MEM(token = json_tokener_new());
+	obj = json_tokener_parse_ex(token, (const char*) vp->vp_octets, vp->vp_length);
+	err = json_tokener_get_error(token);
+	if (err != json_tokener_success) {
+		RERROR("Error EAP-Serialized-Tls-Opaque: %s %d", json_tokener_error_desc(err), err);
+error:
+		talloc_free(t);
+		json_tokener_free(token);
+		return 0;
+	}
+
+#define SET_BOOL(f) do {\
+	if (!json_object_object_get_ex(obj, #f, &val)) {\
+		RERROR("Cannot find " #f);\
+		goto error;\
+	}\
+	t->f = json_object_get_boolean(val);\
+	RDEBUG("Setting " #f " with %d", t->f);\
+} while(0)
+
+	SET_BOOL(authenticated);
+	json_tokener_free(token);
 	return 1;
 }
 
@@ -465,6 +492,7 @@ static int mod_deserialize(REQUEST *request, void *instance, REQUEST *fake, eap_
 	enum json_tokener_error err;
 	tls_session_t *ssn = NULL;
 	rlm_eap_ttls_t *inst = (rlm_eap_ttls_t *) instance;
+	handler->request = request;
 
 	vp = fr_pair_find_by_num(fake->reply->vps, PW_EAP_SERIALIZED_OPAQUE, 0, TAG_ANY);
 	if (!vp) {
@@ -484,23 +512,19 @@ error:
 		return 0;
 	}
 
-	/*
-	if ((ssn = tls_new_session(handler, inst->tls_conf, request, false, false)) == NULL) {
+	if ((ssn = eaptls_session(handler, inst->tls_conf, false, true)) == NULL) {
 		goto error;
 	}
-	*/
 
 	if (!deserialize_tls_session(request, instance, fake, obj, ssn)) {
 		goto error;
 	}
 
-	if (!deserialize_ttls_tunnel(instance, fake, obj, (ttls_tunnel_t *) ssn->opaque)) {
+	if (!deserialize_ttls_tunnel(request, instance, fake, ssn)) {
 		goto error;
 	}
 
-	ssn->label = "ttls keying material";
 	handler->opaque = ssn;
-
 	return 1;
 }
 
