@@ -22,6 +22,38 @@
  */
 
 #include "eap_tls.h"
+
+#define SET_BOOL(n, t) do {\
+	MEM(val = json_object_new_boolean((t->n)));\
+	json_object_object_add(obj, #n, val);\
+} while(0)
+
+#define SET_INT(n, t) do {\
+	MEM(val = json_object_new_int64((t->n)));\
+	json_object_object_add(obj, #n, val);\
+} while(0)
+
+#define GET_INT(f, t) do {\
+	uint64_t num;\
+	if (!json_object_object_get_ex(obj, #f, &val)) {\
+		RERROR("Cannot find " #f " for info");\
+		return 0;\
+	}\
+	num = json_object_get_int64(val);\
+	t->f = num;\
+	RDEBUG("Setting " #f "with %ld ", num);\
+} while(0)
+
+#define GET_BOOL(f, t) do {\
+	if (!json_object_object_get_ex(obj, #f, &val)) {\
+		RERROR("Cannot find " #f);\
+		return 0;\
+	}\
+	\
+	t->f = json_object_get_boolean(val);\
+} while(0)
+
+
 int serialize_fixed(UNUSED void *instance, REQUEST *fake, eap_handler_t *handler, size_t len)
 {
 	VALUE_PAIR *vp;
@@ -51,34 +83,22 @@ int deserialize_fixed(UNUSED void *instance, REQUEST *fake, eap_handler_t *handl
 static int serialize_tls_info(json_object *parent, const char* name, tls_info_t *info)
 {
 
-#define SET_BOOL(n) do {\
-	MEM(val = json_object_new_boolean((info->n)));\
-	json_object_object_add(obj, #n, val);\
-} while(0)
-
-#define SET_INT(n) do {\
-	MEM(val = json_object_new_int64((info->n)));\
-	json_object_object_add(obj, #n, val);\
-} while(0)
-
 	json_object *val, *obj;
 
 	MEM(obj = json_object_new_object());
 	json_object_object_add(parent, name, obj);
 
-	SET_INT(origin);
-	SET_INT(content_type);
-	SET_INT(handshake_type);
-	SET_INT(alert_level);
-	SET_INT(alert_description);
-	SET_INT(record_len);
-	SET_BOOL(initialized);
+	SET_INT(origin, info);
+	SET_INT(content_type, info);
+	SET_INT(handshake_type, info);
+	SET_INT(alert_level, info);
+	SET_INT(alert_description, info);
+	SET_INT(record_len, info);
+	SET_BOOL(initialized, info);
 	MEM(val = json_object_new_string(info->info_description));
 	json_object_object_add(obj, "info_description", val);
 
 	return 0;
-#undef SET_BOOL
-#undef SET_INT
 }
 
 static int deserialize_tls_info(REQUEST* request, json_object *parent, const char* name, tls_info_t *info)
@@ -89,39 +109,15 @@ static int deserialize_tls_info(REQUEST* request, json_object *parent, const cha
 			return 1;
 	}
 
-#define SET_INT(f) do {\
-	uint64_t num;\
-	if (!json_object_object_get_ex(obj, #f, &val)) {\
-		RERROR("Cannot find " #f " for info");\
-		return 0;\
-	}\
-	num = json_object_get_int64(val);\
-	info->f = num;\
-	RDEBUG("Setting " #f "with %ld ", num);\
-} while(0)
-
-#define SET_BOOL(f) do {\
-	if (!json_object_object_get_ex(obj, #f, &val)) {\
-		RERROR("Cannot find " #f);\
-		return 0;\
-	}\
-	\
-	info->f = json_object_get_boolean(val);\
-} while(0)
-
-	SET_INT(origin);
-	SET_INT(content_type);
-	SET_INT(handshake_type);
-	SET_INT(alert_level);
-	SET_INT(alert_description);
-	SET_INT(record_len);
-	SET_BOOL(initialized);
-	MEM(val = json_object_new_string(info->info_description));
-	json_object_object_add(obj, "info_description", val);
+	GET_INT(origin, info);
+	GET_INT(content_type, info);
+	GET_INT(handshake_type, info);
+	GET_INT(alert_level, info);
+	GET_INT(alert_description, info);
+	GET_INT(record_len, info);
+	GET_BOOL(initialized, info);
 
 	return 0;
-#undef SET_BOOL
-#undef SET_INT
 }
 
 static int serialize_record_t(json_object *obj, const char* name, record_t * record)
@@ -179,37 +175,25 @@ int serialize_tls_session(UNUSED REQUEST *request, UNUSED void *instance, UNUSED
 		}
 	}
 
-#define SET_BOOL(n) do {\
-	MEM(val = json_object_new_boolean((ssn->n)));\
-	json_object_object_add(obj, #n, val);\
-} while(0)
-
-#define SET_INT(n) do {\
-	MEM(val = json_object_new_int64((ssn->n)));\
-	json_object_object_add(obj, #n, val);\
-} while(0)
-
 	serialize_tls_info(obj, "info", &ssn->info);
 	serialize_record_t(obj, "clean_in", &ssn->clean_in);
 	serialize_record_t(obj, "clean_out", &ssn->clean_out);
 	serialize_record_t(obj, "dirty_in", &ssn->dirty_in);
 	serialize_record_t(obj, "dirty_out", &ssn->dirty_out);
-	SET_BOOL(invalid_hb_used);
-	SET_BOOL(connected);
-	SET_BOOL(is_init_finished);
-	SET_BOOL(client_cert_ok);
-	SET_BOOL(authentication_success);
-	SET_BOOL(quick_session_tickets);
-	SET_BOOL(fragment);
-	SET_BOOL(length_flag);
-	SET_BOOL(allow_session_resumption);
-	SET_BOOL(session_not_resumed);
+	SET_BOOL(invalid_hb_used, ssn);
+	SET_BOOL(connected, ssn);
+	SET_BOOL(is_init_finished, ssn);
+	SET_BOOL(client_cert_ok, ssn);
+	SET_BOOL(authentication_success, ssn);
+	SET_BOOL(quick_session_tickets, ssn);
+	SET_BOOL(fragment, ssn);
+	SET_BOOL(length_flag, ssn);
+	SET_BOOL(allow_session_resumption, ssn);
+	SET_BOOL(session_not_resumed, ssn);
 
-	SET_INT(mtu);
-	SET_INT(tls_msg_len);
-	SET_INT(peap_flag);
-#undef SET_BOOL
-#undef SET_INT
+	SET_INT(mtu, ssn);
+	SET_INT(tls_msg_len, ssn);
+	SET_INT(peap_flag, ssn);
 	return 1;
 }
 
@@ -217,43 +201,21 @@ int deserialize_tls_session(REQUEST *request, UNUSED void *instance, UNUSED REQU
 {
 	json_object *val;
 
-#define SET_INT(f) do {\
-	uint64_t num;\
-	if (!json_object_object_get_ex(obj, #f, &val)) {\
-		RERROR("Cannot find " #f);\
-		return 0;\
-	}\
-	num = json_object_get_int64(val);\
-	ssn->f = num;\
-	RDEBUG("Setting " #f "with %ld ", num);\
-} while(0)
-
-#define SET_BOOL(f) do {\
-	if (!json_object_object_get_ex(obj, #f, &val)) {\
-		RERROR("Cannot find " #f);\
-		return 0;\
-	}\
-	\
-	ssn->f = json_object_get_boolean(val);\
-} while(0)
 	deserialize_tls_info(request, obj, "info", &ssn->info);
-	SET_BOOL(invalid_hb_used);
-	SET_BOOL(connected);
-	SET_BOOL(is_init_finished);
-	SET_BOOL(client_cert_ok);
-	SET_BOOL(authentication_success);
-	SET_BOOL(quick_session_tickets);
-	SET_BOOL(fragment);
-	SET_BOOL(length_flag);
-	SET_BOOL(allow_session_resumption);
-	SET_BOOL(session_not_resumed);
+	GET_BOOL(invalid_hb_used, ssn);
+	GET_BOOL(connected, ssn);
+	GET_BOOL(is_init_finished, ssn);
+	GET_BOOL(client_cert_ok, ssn);
+	GET_BOOL(authentication_success, ssn);
+	GET_BOOL(quick_session_tickets, ssn);
+	GET_BOOL(fragment, ssn);
+	GET_BOOL(length_flag, ssn);
+	GET_BOOL(allow_session_resumption, ssn);
+	GET_BOOL(session_not_resumed, ssn);
 
-	SET_INT(mtu);
-	SET_INT(tls_msg_len);
-	SET_INT(peap_flag);
+	GET_INT(mtu, ssn);
+	GET_INT(tls_msg_len, ssn);
+	GET_INT(peap_flag, ssn);
 
-	//talloc_set_destructor(state, _tls_session_free);
-#undef SET_BOOL
-#undef SET_INT
 	return 1;
 }
