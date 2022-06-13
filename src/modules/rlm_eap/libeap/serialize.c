@@ -133,6 +133,51 @@ static int serialize_record_t(json_object *obj, const char* name, record_t * rec
 	return 1;
 }
 
+static int deserialize_record_t(json_object *obj, const char* name, record_t * record)
+{
+	json_object *val;
+	const char *data;
+	size_t len;
+
+	if (!json_object_object_get_ex(obj, name, &val)) {
+	empty:
+		record->used = 0;
+		return 1;
+	}
+
+	data = json_object_get_string(val);
+	if (!data) goto empty;
+
+	len = json_object_get_string_len(val);
+	if (!len) goto empty;
+
+	fr_hex2bin(record->data, MAX_RECORD_SIZE, data, len);
+	return 1;
+}
+
+static int serialize_bio(json_object *obj, const char* name, BIO *bio)
+{
+	json_object *val;
+	char *data;
+	BUF_MEM *mem;
+
+	if (bio == NULL) {
+		return 0;
+	}
+
+	BIO_get_mem_ptr(bio, &mem);
+	if (mem->length == 0) {
+		return 0;
+	}
+
+	data = malloc(mem->length * 2);
+	fr_bin2hex(data, (uint8_t *) mem->data, mem->length);
+	MEM(val = json_object_new_string_len(data, mem->length * 2));
+	json_object_object_add(obj, name, val);
+	free(data);
+	return 0;
+}
+
 int serialize_tls_session(UNUSED REQUEST *request, UNUSED void *instance, UNUSED REQUEST *fake, json_object *obj, tls_session_t *ssn)
 {
 	VALUE_PAIR *vp;
@@ -175,6 +220,8 @@ int serialize_tls_session(UNUSED REQUEST *request, UNUSED void *instance, UNUSED
 		}
 	}
 
+	serialize_bio(obj, "into_ssl", ssn->into_ssl);
+	serialize_bio(obj, "from_ssl", ssn->from_ssl);
 	serialize_tls_info(obj, "info", &ssn->info);
 	serialize_record_t(obj, "clean_in", &ssn->clean_in);
 	serialize_record_t(obj, "clean_out", &ssn->clean_out);
@@ -197,11 +244,43 @@ int serialize_tls_session(UNUSED REQUEST *request, UNUSED void *instance, UNUSED
 	return 1;
 }
 
+static int deserialize_bio(UNUSED REQUEST *request, json_object *obj, const char *name, BIO *bio)
+{
+	json_object *val;
+	BUF_MEM *mem;
+	size_t len;
+	const char *data;
+
+	if (!bio) return 1;
+
+	if (!json_object_object_get_ex(obj, name, &val)) {
+			return 1;
+	}
+
+	data = json_object_get_string(val);
+	if (!data) return 1;
+
+	len = json_object_get_string_len(val);
+	if (!len) return 1;
+
+	mem = BUF_MEM_new();
+	BUF_MEM_grow(mem, len/2);
+	fr_hex2bin((uint8_t *) mem->data, mem->length, data, len);
+	BIO_set_mem_buf(bio, mem, BIO_CLOSE);
+	return 1;
+}
+
 int deserialize_tls_session(REQUEST *request, UNUSED void *instance, UNUSED REQUEST *fake, json_object *obj, tls_session_t *ssn)
 {
 	json_object *val;
 
 	deserialize_tls_info(request, obj, "info", &ssn->info);
+	deserialize_bio(request, obj, "into_ssl", ssn->into_ssl);
+	deserialize_bio(request, obj, "from_ssl", ssn->from_ssl);
+	deserialize_record_t(obj, "clean_in", &ssn->clean_in);
+	deserialize_record_t(obj, "clean_out", &ssn->clean_out);
+	deserialize_record_t(obj, "dirty_in", &ssn->dirty_in);
+	deserialize_record_t(obj, "dirty_out", &ssn->dirty_out);
 	GET_BOOL(invalid_hb_used, ssn);
 	GET_BOOL(connected, ssn);
 	GET_BOOL(is_init_finished, ssn);
