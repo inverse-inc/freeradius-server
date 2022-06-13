@@ -51,5 +51,7 @@ cache cache_intermediate_eap {
 		&reply:EAP-Serialized-Handler  := &reply:EAP-Serialized-Handler
 		&reply:EAP-Serialized-Opaque   := &reply:EAP-Serialized-Opaque
 		&reply:EAP-Serialized-Tls-Opaque  := &reply:EAP-Serialized-Tls-Opaque
+		&reply:EAP-Serialized-Tls-Time    := &reply:EAP-Serialized-Tls-Time
+		&reply:EAP-Serialized-Tls-Session := &reply:EAP-Serialized-Tls-Session
 	}
 }
