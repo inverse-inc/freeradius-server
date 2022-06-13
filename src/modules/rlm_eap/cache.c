@@ -155,7 +155,7 @@ static int serialized_handler(REQUEST *request, REQUEST *fake, UNUSED rlm_eap_t 
 	}
 	
 	if (handler->certs) {
-		json_object_object_add(obj, "cert", json_object_new_array());
+		json_object_object_add(obj, "certs", json_object_new_array());
 	}
 
 	json_str = json_object_to_json_string_length(obj, 0, &len);
