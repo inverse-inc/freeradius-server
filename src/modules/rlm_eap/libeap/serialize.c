@@ -152,6 +152,7 @@ static int deserialize_record_t(json_object *obj, const char* name, record_t * r
 	if (!len) goto empty;
 
 	fr_hex2bin(record->data, MAX_RECORD_SIZE, data, len);
+	record->used = len / 2;
 	return 1;
 }
 
