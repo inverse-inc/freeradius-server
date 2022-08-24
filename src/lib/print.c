@@ -500,7 +500,7 @@ char *vp_aprints_type(TALLOC_CTX *ctx, PW_TYPE type)
  */
 size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool raw_value)
 {
-	char const	*q;
+	char const	*q, *end;
 	size_t		len, freespace = outlen;
 	/* attempt to print raw_value when has_value is false, or raw_value is false, but only
 	   if has_tag is also false */
@@ -527,9 +527,10 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 	*out++ = '"';
 	freespace--;
 
+	end = vp->vp_strvalue + vp->vp_length;
 	switch (vp->da->type) {
 	case PW_TYPE_STRING:
-		for (q = vp->vp_strvalue; q < vp->vp_strvalue + vp->vp_length; q++) {
+		for (q = vp->vp_strvalue; q < end; q++) {
 			/* Indicate truncation */
 			if (freespace < 3) return outlen + 1;
 
@@ -578,8 +579,15 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 					freespace--;
 					break;
 				default:
-					len = snprintf(out, freespace, "u%04X", (uint8_t) *q);
-					if (is_truncated(len, freespace)) return (outlen - freespace) + len;
+					len = fr_utf8_char((uint8_t const *)q, end - q);
+					if (len == 0) {
+						len = snprintf(out, freespace, "u%04X", (uint8_t) *q);
+						if (is_truncated(len, freespace)) return (outlen - freespace) + len;
+					} else {
+						if (is_truncated(len, freespace)) return (outlen - freespace) + len;
+						memcpy(out, q, len);
+						q += len - 1;
+					}
 					out += len;
 					freespace -= len;
 				}
