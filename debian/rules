@@ -127,6 +127,7 @@ endif
 		--without-rlm_eap_ikev2 \
 		--without-rlm_sql_oracle \
 		--with-systemd \
+		--with-modules="rlm_raw" \
 		--enable-reproducible-builds
 
 	rm config.guess

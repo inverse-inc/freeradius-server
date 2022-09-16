@@ -1,0 +1,18 @@
+diff -ruN freeradius-server-3.0.18.orig/src/modules/rlm_rest/rest.h freeradius-server-3.0.18/src/modules/rlm_rest/rest.h
+--- freeradius-server-3.0.18.orig/src/modules/rlm_rest/rest.h	2018-11-12 11:12:25.000000000 -0500
++++ freeradius-server-3.0.18/src/modules/rlm_rest/rest.h	2020-04-01 15:59:08.001804354 -0400
+@@ -39,10 +39,10 @@
+ #  endif
+ #endif
+ 
+-#define REST_URI_MAX_LEN		2048
+-#define REST_BODY_MAX_LEN		8192
+-#define REST_BODY_INIT			1024
+-#define REST_BODY_MAX_ATTRS		256
++#define REST_URI_MAX_LEN                4096
++#define REST_BODY_MAX_LEN               16384
++#define REST_BODY_INIT                  2048
++#define REST_BODY_MAX_ATTRS             512
+ 
+ typedef enum {
+ 	HTTP_METHOD_UNKNOWN = 0,
