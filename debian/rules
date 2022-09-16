@@ -115,6 +115,7 @@ endif
 		--without-rlm_sql_oracle \
 		--without-rlm_sql_unixodbc \
 		--with-systemd \
+		--with-modules="rlm_raw" \
 		--enable-reproducible-builds
 
 	rm config.guess

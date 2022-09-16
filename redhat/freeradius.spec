@@ -48,6 +48,10 @@ Source100: freeradius-radiusd-init
 Source102: freeradius-logrotate
 Source103: freeradius-pam-conf
 
+Patch1: collectd.diff
+Patch2: rlm_raw.diff
+Patch3: fix.dictionary.diff
+
 Obsoletes: freeradius-devel
 Obsoletes: freeradius-libs
 
@@ -239,9 +243,9 @@ Requires: %{name} = %{version}-%{release}
 Requires: mysql
 %endif
 %if 0%{?rhel} >= 8
-Requires: mysql-libs
+Requires: mariadb
 %endif
-BuildRequires: mysql-devel
+BuildRequires: MariaDB-devel
 
 %description mysql
 This plugin provides MySQL support for the FreeRADIUS server project.
@@ -356,6 +360,9 @@ This plugin provides YubiCloud support for the FreeRADIUS server project.
 
 %prep
 %setup -q -n freeradius-server-%{version}
+%patch1 -p1
+%patch2 -p1
+%patch3 -p1
 # Some source files mistakenly have execute permissions set
 find $RPM_BUILD_DIR/freeradius-server-%{version} \( -name '*.c' -o -name '*.h' \) -a -perm /0111 -exec chmod a-x {} +
 
@@ -401,6 +408,7 @@ export LDFLAGS="-Wl,--build-id"
         --with-winbind-include-dir=/usr/include/samba-4.0 \
         --with-winbind-lib-dir=/usr/lib64/samba \
         --with-systemd \
+        --with-modules="rlm_raw" \
         %{?_with_rlm_yubikey} \
         %{?_without_rlm_yubikey} \
         %{?_with_rlm_sql_oracle} \
@@ -655,6 +663,7 @@ fi
 %{_libdir}/freeradius/rlm_passwd.so
 %{_libdir}/freeradius/rlm_preprocess.so
 %{_libdir}/freeradius/rlm_radutmp.so
+%{_libdir}/freeradius/rlm_raw.so
 %{_libdir}/freeradius/rlm_realm.so
 %{_libdir}/freeradius/rlm_replicate.so
 %{_libdir}/freeradius/rlm_soh.so

@@ -1,0 +1,12 @@
+diff --git a/src/modules/rlm_cache/rlm_cache.c b/src/modules/rlm_cache/rlm_cache.c
+index 9dcf5ff422..828192be5e 100644
+--- a/src/modules/rlm_cache/rlm_cache.c
++++ b/src/modules/rlm_cache/rlm_cache.c
+@@ -823,6 +823,7 @@ module_t rlm_cache = {
+ 	.detach		= mod_detach,
+ 	.methods = {
+ 		[MOD_AUTHORIZE]		= mod_cache_it,
++		[MOD_AUTHENTICATE]	= mod_cache_it,
+ 		[MOD_PREACCT]		= mod_cache_it,
+ 		[MOD_ACCOUNTING]	= mod_cache_it,
+ 		[MOD_PRE_PROXY]		= mod_cache_it,
