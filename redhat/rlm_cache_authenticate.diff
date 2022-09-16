@@ -1,0 +1,11 @@
+diff -ruN freeradius-server-3.0.22.orig/src/modules/rlm_cache/rlm_cache.c freeradius-server-3.0.22/src/modules/rlm_cache/rlm_cache.c
+--- freeradius-server-3.0.22.orig/src/modules/rlm_cache/rlm_cache.c	2021-05-17 09:01:45.000000000 -0400
++++ freeradius-server-3.0.22/src/modules/rlm_cache/rlm_cache.c	2021-05-31 15:18:19.695514209 -0400
+@@ -828,6 +828,7 @@
+ 	.instantiate	= mod_instantiate,
+ 	.detach		= mod_detach,
+ 	.methods = {
++		[MOD_AUTHENTICATE]	= mod_cache_it,
+ 		[MOD_AUTHORIZE]		= mod_cache_it,
+ 		[MOD_PREACCT]		= mod_cache_it,
+ 		[MOD_ACCOUNTING]	= mod_cache_it,
