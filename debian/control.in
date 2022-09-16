@@ -32,6 +32,7 @@ Build-Depends: @BUILDDEPS@ debhelper (>= 9),
  python3-dev, @PYTWODEPS@
  samba-dev | samba4-dev,
  unixodbc-dev
+ libcollectdclient-dev,
 Section: net
 Priority: optional
 Maintainer: Network RADIUS SARL <info@networkradius.com>
