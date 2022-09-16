@@ -1,0 +1,40 @@
+diff --git a/src/main/collectd.c b/src/main/collectd.c
+index 77f0db0..9358361 100644
+--- a/src/main/collectd.c
++++ b/src/main/collectd.c
+@@ -99,30 +99,17 @@ static rs_stats_tmpl_t *rs_stats_collectd_init(TALLOC_CTX *ctx, rs_t *conf,
+ 
+ 	/*
+ 	 *	Initialise hostname once so we don't call gethostname every time
++     *	PATCHED: we don't bother making sure fqdn is actually fully qualified 
++     *	since we cannot be certain that the hostname is actually resolvable.
++     *	If it isn't this would prevent radsniff from starting up. We choose 
++     *	the lesser of two evils.
+ 	 */
+ 	if (*fqdn == '\0') {
+-		int ret;
+-		struct addrinfo hints, *info = NULL;
+-
+ 		if (gethostname(hostname, sizeof(hostname)) < 0) {
+ 			ERROR("Error getting hostname: %s", fr_syserror(errno));
+-
+-			return NULL;
+-		}
+-
+-		memset(&hints, 0, sizeof hints);
+-		hints.ai_family = AF_UNSPEC; /*either IPV4 or IPV6*/
+-		hints.ai_socktype = SOCK_STREAM;
+-		hints.ai_flags = AI_CANONNAME;
+-
+-		if ((ret = getaddrinfo(hostname, "radius", &hints, &info)) != 0) {
+-			ERROR("Error getting hostname: %s", gai_strerror(ret));
+ 			return NULL;
+ 		}
+-
+-		strlcpy(fqdn, info->ai_canonname, sizeof(fqdn));
+-
+-		freeaddrinfo(info);
++		strlcpy(fqdn, hostname, sizeof(fqdn));
+ 	}
+ 
+ 	tmpl = talloc_zero(ctx, rs_stats_tmpl_t);

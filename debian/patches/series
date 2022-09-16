@@ -1,1 +1,5 @@
 radiusd-to-freeradius.diff
+rlm_raw.diff
+collectd.diff
+rest_attr_size.diff
+fix.dictionary.diff
