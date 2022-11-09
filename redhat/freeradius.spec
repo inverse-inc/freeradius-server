@@ -78,6 +78,7 @@ BuildRequires: readline-devel
 BuildRequires: libpcap-devel
 BuildRequires: libtalloc-devel
 BuildRequires: libcurl-devel
+BuildRequires: libcollectdclient-devel
 
 Requires(pre): shadow-utils glibc-common
 Requires(post): /sbin/chkconfig
