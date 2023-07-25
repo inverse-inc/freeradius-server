@@ -67,7 +67,7 @@ void json_object_put_assert(json_object *obj)
  */
 json_object *json_object_from_attr_value(TALLOC_CTX *ctx, VALUE_PAIR const *vp, bool always_string, bool enum_as_int)
 {
-	char buf[2048];
+	char buf[4096];
 	ssize_t len;
 
 	/*
