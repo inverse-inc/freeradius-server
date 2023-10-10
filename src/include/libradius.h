@@ -346,7 +346,7 @@ typedef struct vp_cursor {
  */
 typedef struct value_pair_raw {
 	char l_opand[256];					//!< Left hand side of the pair.
-	char r_opand[8192];					//!< Right hand side of the pair.
+	char r_opand[16384];		   			//!< Right hand side of the pair.
 
 	FR_TOKEN quote;						//!< Type of quoting around the r_opand.
 
