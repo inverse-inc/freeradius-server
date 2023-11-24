@@ -30,11 +30,12 @@
 
 Summary: High-performance and highly configurable free RADIUS server
 Name: freeradius
-Version: 3.2.3
-Release: 1%{?dist}
+Version: 3.2.2
+Release: 2%{?dist}
 License: GPLv2+ and LGPLv2+
 Group: System Environment/Daemons
 URL: http://www.freeradius.org/
+Epoch: 1
 
 Source0: ftp://ftp.freeradius.org/pub/radius/freeradius-server-%{version}.tar.bz2
 %if %{?_unitdir:1}%{!?_unitdir:0}
