@@ -129,7 +129,7 @@ done when adding or deleting new users.
 %package memcached
 Summary: Memcached support for freeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: libmemcached
 BuildRequires: libmemcached-devel
 
@@ -152,7 +152,7 @@ Requires: util-linux
 %package utils
 Group: System Environment/Daemons
 Summary: FreeRADIUS utilities
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: libpcap >= 0.9.4
 
 %description utils
@@ -177,7 +177,7 @@ SQL databases.
 %package ldap
 Summary: LDAP support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 %if 0%{?rhel} <= 8
 Requires: openldap-ltb, cyrus-sasl
 BuildRequires: openldap-ltb, cyrus-sasl-devel
@@ -194,7 +194,7 @@ This plugin provides LDAP support for the FreeRADIUS server project.
 %package krb5
 Summary: Kerberos 5 support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: krb5-libs
 BuildRequires: krb5-devel
 
@@ -204,7 +204,7 @@ This plugin provides Kerberos 5 support for the FreeRADIUS server project.
 %package perl
 Summary: Perl support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: perl(:MODULE_COMPAT_%(eval "`%{__perl} -V:version`"; echo $version))
 BuildRequires: perl-devel
 BuildRequires: perl(ExtUtils::Embed)
@@ -216,7 +216,7 @@ This plugin provides Perl support for the FreeRADIUS server project.
 %package python
 Summary: Python support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 %{?fedora:Requires: python2}
 %{?fedora:BuildRequires: python2-devel}
 %if 0%{?rhel} <= 7
@@ -241,7 +241,7 @@ This plugin provides Python support for the FreeRADIUS server project.
 %package mysql
 Summary: MySQL support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 %if 0%{?rhel} <= 7
 Requires: mysql
 %endif
@@ -264,7 +264,7 @@ This plugin provides MySQL support for the FreeRADIUS server project.
 %package postgresql
 Summary: PostgreSQL support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: postgresql
 BuildRequires: postgresql-devel
 
@@ -274,7 +274,7 @@ This plugin provides PostgreSQL support for the FreeRADIUS server project.
 %package sqlite
 Summary: SQLite support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: sqlite
 BuildRequires: sqlite-devel
 
@@ -284,7 +284,7 @@ This plugin provides SQLite support for the FreeRADIUS server project.
 %package unixODBC
 Summary: unixODBC support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: unixODBC
 BuildRequires: unixODBC-devel
 
@@ -294,7 +294,7 @@ This plugin provides unixODBC support for the FreeRADIUS server project.
 %package freetds
 Summary: FreeTDS support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: freetds
 BuildRequires: freetds-devel
 
@@ -305,7 +305,7 @@ This plugin provides FreeTDS support for the FreeRADIUS server project.
 %package oracle
 Summary: Oracle support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: oracle-instantclient11.2
 BuildRequires: oracle-instantclient11.2-devel
 
@@ -326,7 +326,7 @@ This plugin provides Oracle support for the FreeRADIUS server project.
 %package redis
 Summary: Redis support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: hiredis
 BuildRequires: hiredis-devel
 
@@ -337,7 +337,7 @@ This plugin provides Redis support for the FreeRADIUS server project.
 %package rest
 Summary: REST and JSON support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: json-c >= 0.10
 BuildRequires: json-c-devel >= 0.10
 
@@ -348,7 +348,7 @@ This plugin provides REST support for the FreeRADIUS server project.
 %package ruby
 Summary: Ruby support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: ruby
 BuildRequires: ruby ruby-devel
 
@@ -370,7 +370,7 @@ This plugin provides unbound DNS support for the FreeRADIUS server project.
 %package yubikey
 Summary: YubiCloud support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: ykclient >= 2.10
 BuildRequires: ykclient-devel >= 2.10
 
