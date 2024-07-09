@@ -31,7 +31,7 @@ Build-Depends: @BUILDDEPS@ debhelper (>= 9),
  libhiredis-dev,
  python3-dev, @PYTWODEPS@
  samba-dev | samba4-dev,
- unixodbc-dev
+ unixodbc-dev,
  libcollectdclient-dev,
 Section: net
 Priority: optional
