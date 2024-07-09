@@ -347,7 +347,7 @@ This plugin provides Ruby support for the FreeRADIUS server project.
 %package unbound
 Summary: Unbound DNS support for FreeRADIUS
 Group: System Environment/Daemons
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: unbound
 BuildRequires: unbound-devel
 
