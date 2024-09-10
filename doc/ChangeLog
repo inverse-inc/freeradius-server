@@ -97,6 +97,8 @@ FreeRADIUS 3.2.6 Sat 24 Aug 2024 12:00:00 UTC urgency=low
 	* Several fixes in the event code
 	* Don't leak memory in rlm_sql_sqlite. #5392
 	* Don't stop processing RadSec data too early.
+	* For EAP-TLS, send TLS start without a length field.
+	*  Some clients refuse to do EAP-TLS when this field exists.
 
 FreeRADIUS 3.2.5 Tue 09 Jul 2024 12:00:00 UTC urgency=high
 	Configuration changes
