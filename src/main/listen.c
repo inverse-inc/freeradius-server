@@ -191,8 +191,10 @@ RADCLIENT *client_listener_find(rad_listen_t *listener,
 		/*
 		 *	Lives forever.  Return it.
 		 */
-		if (client->lifetime == 0) return client;
-
+		/*if (client->lifetime == 0) return client;*/
+		if (client->lifetime == 0) {
+			client_delete(clients, client);
+		}
 		/*
 		 *	Rate-limit the deletion of known clients.
 		 *	This makes them last a little longer, but
