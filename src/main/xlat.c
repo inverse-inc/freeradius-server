@@ -31,6 +31,8 @@ RCSID("$Id$")
 #include <freeradius-devel/rad_assert.h>
 #include <freeradius-devel/base64.h>
 
+#define APRINT_LEN 16384
+
 #include <ctype.h>
 
 typedef struct xlat_t {
@@ -2297,8 +2299,8 @@ static char *xlat_aprint(TALLOC_CTX *ctx, REQUEST *request, xlat_exp_t const * c
 
 	case XLAT_VIRTUAL:
 		XLAT_DEBUG("xlat_aprint VIRTUAL");
-		str = talloc_array(ctx, char, 8192); /* FIXME: have the module call talloc_typed_asprintf */
-		rcode = node->xlat->func(node->xlat->instance, request, NULL, str, 8192);
+		str = talloc_array(ctx, char, APRINT_LEN); /* FIXME: have the module call talloc_typed_asprintf */
+		rcode = node->xlat->func(node->xlat->instance, request, NULL, str, APRINT_LEN);
 		if (rcode < 0) {
 			talloc_free(str);
 			return NULL;
@@ -2312,7 +2314,7 @@ static char *xlat_aprint(TALLOC_CTX *ctx, REQUEST *request, xlat_exp_t const * c
 		if (rcode == 0) {
 			talloc_free(str);
 			str = talloc_strdup(ctx, "");
-		} else if (rcode < 8191) {
+		} else if (rcode < (APRINT_LEN-1)) {
 			child = talloc_memdup(ctx, str, rcode + 1);
 			talloc_free(str);
 			str = child;
@@ -2384,10 +2386,10 @@ static char *xlat_aprint(TALLOC_CTX *ctx, REQUEST *request, xlat_exp_t const * c
 			*q = '\0';
 		}
 
-		str = talloc_array(ctx, char, 8192); /* FIXME: have the module call talloc_typed_asprintf */
+		str = talloc_array(ctx, char, APRINT_LEN); /* FIXME: have the module call talloc_typed_asprintf */
 		*str = '\0';	/* Be sure the string is NULL terminated, we now only free on error */
 
-		rcode = node->xlat->func(node->xlat->instance, request, child, str, 8192);
+		rcode = node->xlat->func(node->xlat->instance, request, child, str, APRINT_LEN);
 		talloc_free(child);
 		if (rcode < 0) {
 			talloc_free(str);
