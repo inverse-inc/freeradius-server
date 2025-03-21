@@ -502,6 +502,11 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 {
     char *p;
     size_t len, freespace = outlen;
+    LRAD_UNUSED time_t date;
+    struct tm tm;
+    char buffer[256];
+    DICT_VALUE *dval;
+
     /* attempt to print raw_value when has_value is false, or raw_value is false, but only
        if has_tag is also false */
     bool raw = (raw_value || !vp->da->flags.has_value) && !vp->da->flags.has_tag;
@@ -673,7 +678,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         p += strlen(out);
         break;
 
-    case PW_TYPE_IPADDR:
+    case PW_TYPE_IPV4_ADDR:
         ip_ntoa(buffer, vp->vp_ipaddr);
         strlcpy(out, buffer, outlen);
         p += strlen(out);
@@ -713,14 +718,14 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         p += strlen(out);
         break;
 
-    case PW_TYPE_IPV6ADDR:
+    case PW_TYPE_IPV6_ADDR:
         ip_ntop(buffer, sizeof(buffer), AF_INET6,
             (void const *) &vp->vp_ipv6addr);
         strlcpy(out, buffer, outlen);
         p += strlen(out);
         break;
 
-    case PW_TYPE_IPV6PREFIX:
+    case PW_TYPE_IPV6_PREFIX:
     {
         struct in6_addr addr;
 
