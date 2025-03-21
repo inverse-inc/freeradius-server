@@ -29,6 +29,18 @@ RCSID("$Id$")
 
 #define us(x) (uint8_t) x
 
+/*
+ * Calculate the size of a base64-encoded string.
+ * Note: This macro returns the size of the buffer required to hold the result,
+ * not the size of the resulting data.
+ */
+
+#define FR_BASE64_ENCODE_SIZE(_in_size, _out_size) \
+        do { \
+                _out_size = ((_in_size + 2) / 3) * 4; \
+                _out_size += 1; /* For trailing '\0' */ \
+        } while (0)
+
 /** Base 64 encode binary data
  *
  * Base64 encode IN array of size INLEN into OUT array of size OUTLEN.
