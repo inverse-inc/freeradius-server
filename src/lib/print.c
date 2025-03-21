@@ -500,40 +500,40 @@ char *vp_aprints_type(TALLOC_CTX *ctx, PW_TYPE type)
  */
 size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool raw_value)
 {
-	char *p;
-	size_t		len, freespace = outlen;
-	/* attempt to print raw_value when has_value is false, or raw_value is false, but only
-	   if has_tag is also false */
-	bool		raw = (raw_value || !vp->da->flags.has_value) && !vp->da->flags.has_tag;
+    char *p;
+    size_t len, freespace = outlen;
+    /* attempt to print raw_value when has_value is false, or raw_value is false, but only
+       if has_tag is also false */
+    bool raw = (raw_value || !vp->da->flags.has_value) && !vp->da->flags.has_tag;
 
-	if (raw) {
-		switch (vp->da->type) {
-		case PW_TYPE_INTEGER:
-			return snprintf(out, freespace, "%u", vp->vp_integer);
+    if (raw) {
+        switch (vp->da->type) {
+        case PW_TYPE_INTEGER:
+            return snprintf(out, freespace, "%u", vp->vp_integer);
 
-		case PW_TYPE_SHORT:
-			return snprintf(out, freespace, "%u", (unsigned int) vp->vp_short);
+        case PW_TYPE_SHORT:
+            return snprintf(out, freespace, "%u", (unsigned int)vp->vp_short);
 
-		case PW_TYPE_BYTE:
-			return snprintf(out, freespace, "%u", (unsigned int) vp->vp_byte);
+        case PW_TYPE_BYTE:
+            return snprintf(out, freespace, "%u", (unsigned int)vp->vp_byte);
 
-		default:
-			break;
-		}
-	}
-	p = out;
+        default:
+            break;
+        }
+    }
+    p = out;
 
-	/* Indicate truncation */
-	if (freespace < 2) return outlen + 1;
-	*out++ = '"';
-	freespace--;
+    /* Indicate truncation */
+    if (freespace < 2) return outlen + 1;
+    *out++ = '"';
+    freespace--;
 
-	switch (vp->da->type) {
-	case PW_TYPE_STRING:
+    switch (vp->da->type) {
+    case PW_TYPE_STRING:
         len = vp->length;
 
-        if (len >= (outlen - 1)) {
-            len = outlen - 2;
+        if (len >= (outlen - 2)) {
+            len = outlen - 3;
         }
 
         /* Vérification pour les caractères non-ASCII */
@@ -577,8 +577,8 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             /* Calculer la taille nécessaire pour l'encodage base64 */
             base64_len = ((vp->length + 2) / 3) * 4 + 1;
 
-            if (base64_len >= outlen) {
-                base64_len = outlen - 1;
+            if ((base64_len + 1) >= outlen) {
+                base64_len = outlen - 2;
             }
 
             /* Encoder en base64 */
@@ -590,8 +590,8 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 
             size_t encoded_len = fr_base64_encode((char *)buffer_b64, base64_len, (uint8_t const *)vp->vp_strvalue, vp->length);
 
-            if (encoded_len > outlen - 1) {
-                encoded_len = outlen - 1;
+            if ((encoded_len + 1) >= outlen) {
+                encoded_len = outlen - 2;
             }
 
             memcpy(p, buffer_b64, encoded_len);
@@ -602,8 +602,8 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             char *q = p;
 
             /* Allouer suffisamment d'espace pour les caractères échappés */
-            if (special_chars > 0 && (len + special_chars) >= (outlen - 1)) {
-                len = (outlen - 1) - special_chars;
+            if (special_chars > 0 && (len + special_chars + 2) >= outlen) {
+                len = outlen - special_chars - 3;
             }
 
             for (i = 0; i < len && q < (out + outlen - 2); i++) {
@@ -645,16 +645,17 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         }
         break;
 
-		default:
-        snprintf(out, outlen, "Unknown type %d", vp->da->type);
-        p += strlen(out);
-        break;
+        default:
+            snprintf(out, outlen, "Unknown type %d", vp->da->type);
+            p += strlen(out);
+            break;
     }
 
     *p = '\0';
 
     return p - out + 1;
 }
+
 
 /*
  *  This is a hack, and has to be kept in sync with tokens.h
