@@ -641,7 +641,6 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
                         break;
                 }
             }
-			*p = '\0';
             p = q;
         }
         break;
