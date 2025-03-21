@@ -498,324 +498,150 @@ char *vp_aprints_type(TALLOC_CTX *ctx, PW_TYPE type)
  * @param raw_value if true, the raw value is printed and not the enumerated attribute value
  * @return the length of data written to out, or a value >= outlen on truncation.
  */
-/*
- *	Print the attribute value to a string,
- *	minimizing the width.
- */
-char *vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR *vp)
+size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool raw_value)
 {
-	DICT_VALUE *dval;
-	char *p;
-	size_t  len;
-	LRAD_UNUSED time_t date;
-	struct tm tm;
-	char buffer[256];
+	char const	*q;
+	size_t		len, freespace = outlen;
+	/* attempt to print raw_value when has_value is false, or raw_value is false, but only
+	   if has_tag is also false */
+	bool		raw = (raw_value || !vp->da->flags.has_value) && !vp->da->flags.has_tag;
 
-	out[0] = '\0';
-	if (!vp) return out;
-	if (!vp->da) return out;
+	if (raw) {
+		switch (vp->da->type) {
+		case PW_TYPE_INTEGER:
+			return snprintf(out, freespace, "%u", vp->vp_integer);
 
-	p = out;
+		case PW_TYPE_SHORT:
+			return snprintf(out, freespace, "%u", (unsigned int) vp->vp_short);
 
-	if ((vp->da->type == PW_TYPE_STRING) &&
-	    (vp->da->flags.has_tag)) {
-		/*
-		 *	Tagged attributes.  Tags are defined in
-		 *	RFC 2868, and are 1 octet.
-		 */
-		if (vp->da->flags.encrypt != 0) {
-			switch (vp->da->flags.encrypt) {
-				/*
-				 *	Tunnel passwords are octets,
-				 *	BUT they're also strings!
-				 */
-#if 0
-			case FLAG_ENCRYPT_TUNNEL_PASSWORD:
-			{
-				int decoded;
-				uint8_t tag;
-				char source[MAX_STRING_LEN];
-				uint8_t *orig, *inst;
+		case PW_TYPE_BYTE:
+			return snprintf(out, freespace, "%u", (unsigned int) vp->vp_byte);
 
-				/*
-				 *	Show the call-back function
-				 */
-				if (vp->da->flags.has_tag) {
-					tag = vp->vp_octets[0];
-					orig = &vp->vp_octets[1];
-					len = vp->length - 1;
-				} else {
-					tag = 0;
-					orig = vp->vp_octets;
-					len = vp->length;
-				}
-
-				for (inst = orig; inst < (orig + len); inst++) {
-					sprintf(source + strlen(source),
-						"%02x", *inst);
-				}
-
-				if (vp->da->flags.has_tag) {
-					decoded = sprintf(out, "%s:%d = %s",
-							  vp->da->name, tag,
-							  source);
-				} else {
-					decoded = sprintf(out, "%s = %s",
-							  vp->da->name, source);
-				}
-				p += decoded;
-				break;
-			}
-#endif
-
-			case FLAG_ENCRYPT_USER_PASSWORD:
-				vp_prints_value(out, outlen, vp, 1);
-				break;
-
-				/*
-				 *	Hashed passwords are hex encoded.
-				 */
-			case FLAG_ENCRYPT_OTHER:
-				if (delimiters) strlcpy(p, "0x", outlen - (p - out));
-				p += strlen(p);
-
-				for (len = 0; len < vp->length; len++) {
-					sprintf(p, "%02x", vp->vp_octets[len]);
-					p += 2;
-
-					if (p >= (out + outlen)) break;
-				}
-				break;
-
-				/*
-				 *	Time-stamps are printed normally
-				 */
-			case FLAG_HAS_TAG:
-				goto always_string;
-
-			default:
-				break;
-			}
-			goto done;
+		default:
+			break;
 		}
 	}
 
+	/* Indicate truncation */
+	if (freespace < 2) return outlen + 1;
+	*out++ = '"';
+	freespace--;
 
 	switch (vp->da->type) {
 	case PW_TYPE_STRING:
 	always_string:
-		len = vp->length;
+	len = vp->length;
 
-		if (len >= (outlen - 1)) {
-			len = outlen - 2;
-		}
-
-		/* Vérification pour les caractères non-ASCII */
-		int has_non_ascii = 0;
-		int special_chars = 0;
-		int i;
-
-		for (i = 0; i < len; i++) {
-			if (vp->vp_strvalue[i] < 32 || vp->vp_strvalue[i] > 126) {
-				has_non_ascii = 1;
-				break;
-			}
-
-			/* Caractères qui nécessitent un échappement en JSON */
-			if (vp->vp_strvalue[i] == '\\' ||
-				vp->vp_strvalue[i] == '"' ||
-				vp->vp_strvalue[i] == '\n' ||
-				vp->vp_strvalue[i] == '\r' ||
-				vp->vp_strvalue[i] == '\t' ||
-				vp->vp_strvalue[i] == '\b' ||
-				vp->vp_strvalue[i] == '\f') {
-				special_chars++;
-			}
-		}
-
-		/* Si contient des caractères non-ASCII, encoder en base64 */
-		if (has_non_ascii) {
-			size_t base64_len;
-
-			/* Ajouter un préfixe pour indiquer l'encodage base64 */
-			strcpy(p, "base64:");
-			p += 7;
-			outlen -= 7;
-
-			/* Calculer la taille nécessaire pour l'encodage base64 */
-			FR_BASE64_ENCODE_SIZE(vp->length, base64_len);
-
-			if (base64_len >= (outlen - 1)) {
-				base64_len = outlen - 2;
-			}
-
-			/* Encoder en base64 */
-			fr_base64_encode(p, outlen, vp->vp_strvalue, vp->length);
-			p += strlen(p);
-		} else {
-			/* Pour JSON, nous devons échapper certains caractères */
-			char *q = p;
-
-			/* Allouer suffisamment d'espace pour les caractères échappés */
-			if (special_chars > 0 && (len + special_chars) >= (outlen - 1)) {
-				len = (outlen - 1) - special_chars;
-			}
-
-			for (i = 0; i < len && q < (out + outlen - 2); i++) {
-				switch (vp->vp_strvalue[i]) {
-					case '\\':
-						*(q++) = '\\';
-						*(q++) = '\\';
-						break;
-					case '"':
-						*(q++) = '\\';
-						*(q++) = '"';
-						break;
-					case '\n':
-						*(q++) = '\\';
-						*(q++) = 'n';
-						break;
-					case '\r':
-						*(q++) = '\\';
-						*(q++) = 'r';
-						break;
-					case '\t':
-						*(q++) = '\\';
-						*(q++) = 't';
-						break;
-					case '\b':
-						*(q++) = '\\';
-						*(q++) = 'b';
-						break;
-					case '\f':
-						*(q++) = '\\';
-						*(q++) = 'f';
-						break;
-					default:
-						*(q++) = vp->vp_strvalue[i];
-						break;
-				}
-			}
-			*q = '\0';
-			p = q;
-		}
-		break;
-
-	case PW_TYPE_INTEGER:
-		if (vp->da->flags.has_value) {
-			dval = dict_valbyattr(vp->da->attr, vp->da->vendor,
-					      vp->vp_integer);
-			if (dval) {
-				strlcpy(out, dval->name, outlen);
-				p += strlen(out);
-				break;
-			}
-		}
-		sprintf(out, "%u", vp->vp_integer);
-		p += strlen(out);
-		break;
-
-	case PW_TYPE_INTEGER64:
-		sprintf(out, "%" PRId64, vp->vp_integer64);
-		p += strlen(out);
-		break;
-
-	case PW_TYPE_DATE:
-		date = vp->vp_date;
-		localtime_r(&date, &tm);
-		strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z",
-			 &tm);
-		strlcpy(out, buffer, outlen);
-		p += strlen(out);
-		break;
-
-	case PW_TYPE_IPADDR:
-		ip_ntoa(buffer, vp->vp_ipaddr);
-		strlcpy(out, buffer, outlen);
-		p += strlen(out);
-		break;
-
-	case PW_TYPE_ABINARY:
-#ifdef WITH_ASCEND_BINARY
-		print_abinary(out, outlen, vp, 0);
-#else
-		sprintf(out, "Ascend binary data");
-#endif
-		p += strlen(out);
-		break;
-
-	case PW_TYPE_OCTETS:
-		strcpy(out, "0x");
-		p += 2;
-		outlen -= 2;
-
-		for (len = 0; len < vp->length; len++) {
-			sprintf(p, "%02x", vp->vp_octets[len]);
-			p += 2;
-			if (p >= (out + outlen)) break;
-		}
-		break;
-
-	case PW_TYPE_IFID:
-		sprintf(out, "%x:%x:%x:%x",
-			(vp->vp_ifid[0] << 8) | vp->vp_ifid[1],
-			(vp->vp_ifid[2] << 8) | vp->vp_ifid[3],
-			(vp->vp_ifid[4] << 8) | vp->vp_ifid[5],
-			(vp->vp_ifid[6] << 8) | vp->vp_ifid[7]);
-		p += strlen(out);
-		break;
-
-	case PW_TYPE_IPV6ADDR:
-		ip_ntop(buffer, sizeof(buffer), AF_INET6,
-			(void const *) &vp->vp_ipv6addr);
-		strlcpy(out, buffer, outlen);
-		p += strlen(out);
-		break;
-
-	case PW_TYPE_IPV6PREFIX:
-	{
-		struct in6_addr addr;
-
-		/*
-		 *	Alignment issues.
-		 */
-		memcpy(&addr, &vp->vp_ipv6prefix[2], sizeof(addr));
-
-		ip_ntop(buffer, sizeof(buffer), AF_INET6,
-			(void const *) &addr);
-		sprintf(out, "%s/%u", buffer, vp->vp_ipv6prefix[1]);
-		p += strlen(out);
+	if (len >= (outlen - 1)) {
+		len = outlen - 2;
 	}
-		break;
 
-	case PW_TYPE_ETHERNET:
-		sprintf(out, "%02x:%02x:%02x:%02x:%02x:%02x",
-			vp->vp_ether[0], vp->vp_ether[1],
-			vp->vp_ether[2], vp->vp_ether[3],
-			vp->vp_ether[4], vp->vp_ether[5]);
-		p += strlen(out);
-		break;
+	/* Vérification pour les caractères non-ASCII */
+	int has_non_ascii = 0;
+	int special_chars = 0;
+	int i;
 
-	case PW_TYPE_TLV:
-		sprintf(out, "Vendor TLV: %u bytes", vp->length);
-		p += strlen(out);
-		break;
+	for (i = 0; i < len; i++) {
+		if (vp->vp_strvalue[i] < 32 || vp->vp_strvalue[i] > 126) {
+			has_non_ascii = 1;
+			break;
+		}
 
-	case PW_TYPE_SIGNED:
-		sprintf(out, "%d", vp->vp_signed);
-		p += strlen(out);
-		break;
+		/* Caractères qui nécessitent un échappement en JSON */
+		if (vp->vp_strvalue[i] == '\\' ||
+			vp->vp_strvalue[i] == '"' ||
+			vp->vp_strvalue[i] == '\n' ||
+			vp->vp_strvalue[i] == '\r' ||
+			vp->vp_strvalue[i] == '\t' ||
+			vp->vp_strvalue[i] == '\b' ||
+			vp->vp_strvalue[i] == '\f') {
+			special_chars++;
+		}
+	}
+
+	/* Si contient des caractères non-ASCII, encoder en base64 */
+	if (has_non_ascii) {
+		size_t base64_len;
+
+		/* Ajouter un préfixe pour indiquer l'encodage base64 */
+		strcpy(p, "base64:");
+		p += 7;
+		outlen -= 7;
+
+		/* Calculer la taille nécessaire pour l'encodage base64 */
+		FR_BASE64_ENCODE_SIZE(vp->length, base64_len);
+
+		if (base64_len >= (outlen - 1)) {
+			base64_len = outlen - 2;
+		}
+
+		/* Encoder en base64 */
+		fr_base64_encode(p, outlen, vp->vp_strvalue, vp->length);
+		p += strlen(p);
+	} else {
+		/* Pour JSON, nous devons échapper certains caractères */
+		char *q = p;
+
+		/* Allouer suffisamment d'espace pour les caractères échappés */
+		if (special_chars > 0 && (len + special_chars) >= (outlen - 1)) {
+			len = (outlen - 1) - special_chars;
+		}
+
+		for (i = 0; i < len && q < (out + outlen - 2); i++) {
+			switch (vp->vp_strvalue[i]) {
+				case '\\':
+					*(q++) = '\\';
+					*(q++) = '\\';
+					break;
+				case '"':
+					*(q++) = '\\';
+					*(q++) = '"';
+					break;
+				case '\n':
+					*(q++) = '\\';
+					*(q++) = 'n';
+					break;
+				case '\r':
+					*(q++) = '\\';
+					*(q++) = 'r';
+					break;
+				case '\t':
+					*(q++) = '\\';
+					*(q++) = 't';
+					break;
+				case '\b':
+					*(q++) = '\\';
+					*(q++) = 'b';
+					break;
+				case '\f':
+					*(q++) = '\\';
+					*(q++) = 'f';
+					break;
+				default:
+					*(q++) = vp->vp_strvalue[i];
+					break;
+			}
+		}
+		*q = '\0';
+		p = q;
+	}
+	break;
 
 	default:
-		sprintf(out, "Unknown type %d", vp->da->type);
-		p += strlen(out);
+		len = vp_prints_value(out, freespace, vp, 0);
+		if (is_truncated(len, freespace)) return (outlen - freespace) + len;
+		out += len;
+		freespace -= len;
 		break;
 	}
 
-done:
-	*p = '\0';
+	/* Indicate truncation */
+	if (freespace < 2) return outlen + 1;
+	*out++ = '"';
+	freespace--;
+	*out = '\0'; // We don't increment out, because the nul byte should not be included in the length
 
-	return out;
+	return outlen - freespace;
 }
 
 /*
