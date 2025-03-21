@@ -23,7 +23,7 @@
 RCSID("$Id$")
 
 #include	<freeradius-devel/libradius.h>
-
+#include	<freeradius-devel/base64.h>
 #include	<ctype.h>
 
 /** Checks for utf-8, taken from http://www.w3.org/International/questions/qa-forms-utf-8
@@ -500,7 +500,7 @@ char *vp_aprints_type(TALLOC_CTX *ctx, PW_TYPE type)
  */
 size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool raw_value)
 {
-	char const	*q;
+	char *p;
 	size_t		len, freespace = outlen;
 	/* attempt to print raw_value when has_value is false, or raw_value is false, but only
 	   if has_tag is also false */
@@ -521,6 +521,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 			break;
 		}
 	}
+	p = out;
 
 	/* Indicate truncation */
 	if (freespace < 2) return outlen + 1;
@@ -628,20 +629,15 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 	break;
 
 	default:
-		len = vp_prints_value(out, freespace, vp, 0);
-		if (is_truncated(len, freespace)) return (outlen - freespace) + len;
-		out += len;
-		freespace -= len;
+		sprintf(out, "Unknown type %d", vp->da->type);
+		p += strlen(out);
 		break;
 	}
 
-	/* Indicate truncation */
-	if (freespace < 2) return outlen + 1;
-	*out++ = '"';
-	freespace--;
-	*out = '\0'; // We don't increment out, because the nul byte should not be included in the length
+done:
+	*p = '\0';
 
-	return outlen - freespace;
+	return out;
 }
 
 /*
