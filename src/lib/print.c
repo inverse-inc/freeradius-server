@@ -25,6 +25,7 @@ RCSID("$Id$")
 #include	<freeradius-devel/libradius.h>
 #include	<freeradius-devel/base64.h>
 #include	<ctype.h>
+#include	<arpa/inet.h>
 
 /** Checks for utf-8, taken from http://www.w3.org/International/questions/qa-forms-utf-8
  *
@@ -502,7 +503,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 {
     char *p;
     size_t len, freespace = outlen;
-    LRAD_UNUSED time_t date;
+    time_t date;
     struct tm tm;
     char buffer[256];
     DICT_VALUE *dval;
@@ -686,7 +687,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 
     case PW_TYPE_ABINARY:
 #ifdef WITH_ASCEND_BINARY
-        print_abinary(out, outlen, vp, 0);
+        print_abinary(out, outlen, (VALUE_PAIR *)vp, 0);
 #else
         snprintf(out, outlen, "Ascend binary data");
 #endif
