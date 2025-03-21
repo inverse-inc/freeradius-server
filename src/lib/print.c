@@ -514,13 +514,13 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
     if (raw) {
         switch (vp->da->type) {
         case PW_TYPE_INTEGER:
-            return snprintf(out, freespace, "%u", vp->vp_integer);
+            return snprintf(out, freespace, "\"%u\"", vp->vp_integer);
 
         case PW_TYPE_SHORT:
-            return snprintf(out, freespace, "%u", (unsigned int)vp->vp_short);
+            return snprintf(out, freespace, "\"%u\"", (unsigned int)vp->vp_short);
 
         case PW_TYPE_BYTE:
-            return snprintf(out, freespace, "%u", (unsigned int)vp->vp_byte);
+            return snprintf(out, freespace, "\"%u\"", (unsigned int)vp->vp_byte);
 
         default:
             break;
@@ -655,24 +655,24 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             dval = dict_valbyattr(vp->da->attr, vp->da->vendor,
                           vp->vp_integer);
             if (dval) {
-                strlcpy(out, dval->name, outlen);
+                snprintf(out, outlen, "\"%s\"", dval->name);
                 p += strlen(out);
                 break;
             }
         }
-        snprintf(out, outlen, "%u", vp->vp_integer);
+        snprintf(out, outlen, "\"%u\"", vp->vp_integer);
         p += strlen(out);
         break;
 
     case PW_TYPE_INTEGER64:
-        snprintf(out, outlen, "%" PRId64, vp->vp_integer64);
+        snprintf(out, outlen, "\"%" PRId64 "\"", vp->vp_integer64);
         p += strlen(out);
         break;
 
     case PW_TYPE_DATE:
         date = vp->vp_date;
         localtime_r(&date, &tm);
-        strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z",
+        strftime(buffer, sizeof(buffer), "\"%b %e %Y %H:%M:%S %Z\"",
              &tm);
         strlcpy(out, buffer, outlen);
         p += strlen(out);
@@ -680,28 +680,30 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 
     case PW_TYPE_IPV4_ADDR:
         ip_ntoa(buffer, vp->vp_ipaddr);
-        strlcpy(out, buffer, outlen);
+        snprintf(out, outlen, "\"%s\"", buffer);
         p += strlen(out);
         break;
 
     case PW_TYPE_OCTETS:
-        if (outlen < 3) {
+        if (outlen < 5) {
             *p = '\0';
             return 0;
         }
-        strcpy(out, "0x");
-        p += 2;
-        outlen -= 2;
+        strcpy(out, "\"0x");
+        p += 3;
+        outlen -= 3;
 
         for (len = 0; len < vp->length && outlen > 2; len++) {
             sprintf(p, "%02x", vp->vp_octets[len]);
             p += 2;
             outlen -= 2;
         }
+        *p++ = '"';
+        *p = '\0';
         break;
 
     case PW_TYPE_IFID:
-        snprintf(out, outlen, "%x:%x:%x:%x",
+        snprintf(out, outlen, "\"%x:%x:%x:%x\"",
             (vp->vp_ifid[0] << 8) | vp->vp_ifid[1],
             (vp->vp_ifid[2] << 8) | vp->vp_ifid[3],
             (vp->vp_ifid[4] << 8) | vp->vp_ifid[5],
@@ -711,11 +713,11 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 
     case PW_TYPE_IPV6_ADDR:
         inet_ntop(AF_INET6, (void const *) &vp->vp_ipv6addr, buffer, sizeof(buffer));
-        strlcpy(out, buffer, outlen);
+        snprintf(out, outlen, "\"%s\"", buffer);
         p += strlen(out);
         break;
 
-        case PW_TYPE_IPV6_PREFIX:
+    case PW_TYPE_IPV6_PREFIX:
         {
             struct in6_addr addr;
 
@@ -725,13 +727,13 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             memcpy(&addr, &vp->vp_ipv6prefix[2], sizeof(addr));
 
             inet_ntop(AF_INET6, (void const *) &addr, buffer, sizeof(buffer));
-            snprintf(out, outlen, "%s/%u", buffer, vp->vp_ipv6prefix[1]);
+            snprintf(out, outlen, "\"%s/%u\"", buffer, vp->vp_ipv6prefix[1]);
             p += strlen(out);
         }
-            break;
+        break;
 
     case PW_TYPE_ETHERNET:
-        snprintf(out, outlen, "%02x:%02x:%02x:%02x:%02x:%02x",
+        snprintf(out, outlen, "\"%02x:%02x:%02x:%02x:%02x:%02x\"",
             vp->vp_ether[0], vp->vp_ether[1],
             vp->vp_ether[2], vp->vp_ether[3],
             vp->vp_ether[4], vp->vp_ether[5]);
@@ -739,19 +741,19 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         break;
 
     case PW_TYPE_TLV:
-        snprintf(out, outlen, "Vendor TLV: %zu bytes", vp->length);
+        snprintf(out, outlen, "\"Vendor TLV: %zu bytes\"", vp->length);
         p += strlen(out);
         break;
 
     case PW_TYPE_SIGNED:
-        snprintf(out, outlen, "%d", vp->vp_signed);
+        snprintf(out, outlen, "\"%d\"", vp->vp_signed);
         p += strlen(out);
         break;
 
     default:
         len = vp_prints_value(out, outlen, vp, 0);
         if (len < 0 || len >= outlen) {
-            snprintf(out, outlen, "Unknown type %d", vp->da->type);
+            snprintf(out, outlen, "\"Unknown type %d\"", vp->da->type);
             return outlen;
         }
         out += len;
@@ -763,6 +765,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 
     return p - out + 1;
 }
+
 
 
 /*
