@@ -645,11 +645,16 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         }
         break;
 
-        default:
-            snprintf(out, outlen, "Unknown type %d", vp->da->type);
-            p += strlen(out);
-            break;
-    }
+	default:
+		len = vp_prints_value(out, outlen, vp, 0);
+		if (len < 0 || len >= outlen) {
+			snprintf(out, outlen, "Unknown type %d", vp->da->type);
+			return outlen;
+		}
+		out += len;
+		outlen -= len;
+		break;
+	}
 
     *p = '\0';
 
