@@ -588,7 +588,8 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
                 return p - out;
             }
 
-            size_t encoded_len = fr_base64_encode((char *)buffer_b64, base64_len, vp->vp_strvalue, vp->length);
+            size_t encoded_len = fr_base64_encode((char *)buffer_b64, base64_len, (uint8_t const *)vp->vp_strvalue, vp->length);
+
             if (encoded_len > outlen - 1) {
                 encoded_len = outlen - 1;
             }
@@ -640,6 +641,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
                         break;
                 }
             }
+
             p = q;
         }
         break;
