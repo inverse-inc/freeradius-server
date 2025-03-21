@@ -645,6 +645,115 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         }
         break;
 
+	case PW_TYPE_INTEGER:
+        if (vp->da->flags.has_value) {
+            dval = dict_valbyattr(vp->da->attr, vp->da->vendor,
+                          vp->vp_integer);
+            if (dval) {
+                strlcpy(out, dval->name, outlen);
+                p += strlen(out);
+                break;
+            }
+        }
+        snprintf(out, outlen, "%u", vp->vp_integer);
+        p += strlen(out);
+        break;
+
+    case PW_TYPE_INTEGER64:
+        snprintf(out, outlen, "%" PRId64, vp->vp_integer64);
+        p += strlen(out);
+        break;
+
+    case PW_TYPE_DATE:
+        date = vp->vp_date;
+        localtime_r(&date, &tm);
+        strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z",
+             &tm);
+        strlcpy(out, buffer, outlen);
+        p += strlen(out);
+        break;
+
+    case PW_TYPE_IPADDR:
+        ip_ntoa(buffer, vp->vp_ipaddr);
+        strlcpy(out, buffer, outlen);
+        p += strlen(out);
+        break;
+
+    case PW_TYPE_ABINARY:
+#ifdef WITH_ASCEND_BINARY
+        print_abinary(out, outlen, vp, 0);
+#else
+        snprintf(out, outlen, "Ascend binary data");
+#endif
+        p += strlen(out);
+        break;
+
+    case PW_TYPE_OCTETS:
+        if (outlen < 3) {
+            *p = '\0';
+            return 0;
+        }
+        strcpy(out, "0x");
+        p += 2;
+        outlen -= 2;
+
+        for (len = 0; len < vp->length && outlen > 2; len++) {
+            sprintf(p, "%02x", vp->vp_octets[len]);
+            p += 2;
+            outlen -= 2;
+        }
+        break;
+
+    case PW_TYPE_IFID:
+        snprintf(out, outlen, "%x:%x:%x:%x",
+            (vp->vp_ifid[0] << 8) | vp->vp_ifid[1],
+            (vp->vp_ifid[2] << 8) | vp->vp_ifid[3],
+            (vp->vp_ifid[4] << 8) | vp->vp_ifid[5],
+            (vp->vp_ifid[6] << 8) | vp->vp_ifid[7]);
+        p += strlen(out);
+        break;
+
+    case PW_TYPE_IPV6ADDR:
+        ip_ntop(buffer, sizeof(buffer), AF_INET6,
+            (void const *) &vp->vp_ipv6addr);
+        strlcpy(out, buffer, outlen);
+        p += strlen(out);
+        break;
+
+    case PW_TYPE_IPV6PREFIX:
+    {
+        struct in6_addr addr;
+
+        /*
+         *  Alignment issues.
+         */
+        memcpy(&addr, &vp->vp_ipv6prefix[2], sizeof(addr));
+
+        ip_ntop(buffer, sizeof(buffer), AF_INET6,
+            (void const *) &addr);
+        snprintf(out, outlen, "%s/%u", buffer, vp->vp_ipv6prefix[1]);
+        p += strlen(out);
+    }
+        break;
+
+    case PW_TYPE_ETHERNET:
+        snprintf(out, outlen, "%02x:%02x:%02x:%02x:%02x:%02x",
+            vp->vp_ether[0], vp->vp_ether[1],
+            vp->vp_ether[2], vp->vp_ether[3],
+            vp->vp_ether[4], vp->vp_ether[5]);
+        p += strlen(out);
+        break;
+
+    case PW_TYPE_TLV:
+        snprintf(out, outlen, "Vendor TLV: %u bytes", vp->length);
+        p += strlen(out);
+        break;
+
+    case PW_TYPE_SIGNED:
+        snprintf(out, outlen, "%d", vp->vp_signed);
+        p += strlen(out);
+        break;
+
 	default:
 		len = vp_prints_value(out, outlen, vp, 0);
 		if (len < 0 || len >= outlen) {
