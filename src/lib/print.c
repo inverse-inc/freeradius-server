@@ -530,114 +530,130 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 
 	switch (vp->da->type) {
 	case PW_TYPE_STRING:
-	always_string:
-	len = vp->length;
+        len = vp->length;
 
-	if (len >= (outlen - 1)) {
-		len = outlen - 2;
-	}
+        if (len >= (outlen - 1)) {
+            len = outlen - 2;
+        }
 
-	/* Vérification pour les caractères non-ASCII */
-	int has_non_ascii = 0;
-	int special_chars = 0;
-	int i;
+        /* Vérification pour les caractères non-ASCII */
+        int has_non_ascii = 0;
+        int special_chars = 0;
+        int i;
 
-	for (i = 0; i < len; i++) {
-		if (vp->vp_strvalue[i] < 32 || vp->vp_strvalue[i] > 126) {
-			has_non_ascii = 1;
-			break;
-		}
+        for (i = 0; i < len; i++) {
+            if (vp->vp_strvalue[i] < 32 || vp->vp_strvalue[i] > 126) {
+                has_non_ascii = 1;
+                break;
+            }
 
-		/* Caractères qui nécessitent un échappement en JSON */
-		if (vp->vp_strvalue[i] == '\\' ||
-			vp->vp_strvalue[i] == '"' ||
-			vp->vp_strvalue[i] == '\n' ||
-			vp->vp_strvalue[i] == '\r' ||
-			vp->vp_strvalue[i] == '\t' ||
-			vp->vp_strvalue[i] == '\b' ||
-			vp->vp_strvalue[i] == '\f') {
-			special_chars++;
-		}
-	}
+            /* Caractères qui nécessitent un échappement en JSON */
+            if (vp->vp_strvalue[i] == '\\' ||
+                vp->vp_strvalue[i] == '"' ||
+                vp->vp_strvalue[i] == '\n' ||
+                vp->vp_strvalue[i] == '\r' ||
+                vp->vp_strvalue[i] == '\t' ||
+                vp->vp_strvalue[i] == '\b' ||
+                vp->vp_strvalue[i] == '\f') {
+                special_chars++;
+            }
+        }
 
-	/* Si contient des caractères non-ASCII, encoder en base64 */
-	if (has_non_ascii) {
-		size_t base64_len;
+        /* Si contient des caractères non-ASCII, encoder en base64 */
+        if (has_non_ascii) {
+            size_t base64_len;
 
-		/* Ajouter un préfixe pour indiquer l'encodage base64 */
-		strcpy(p, "base64:");
-		p += 7;
-		outlen -= 7;
+            /* S'assurer qu'il y a assez d'espace pour le préfixe "base64:" */
+            if (outlen < 8) {
+                *p = '\0';
+                return 0;
+            }
 
-		/* Calculer la taille nécessaire pour l'encodage base64 */
-		FR_BASE64_ENCODE_SIZE(vp->length, base64_len);
+            /* Ajouter un préfixe pour indiquer l'encodage base64 */
+            strcpy(p, "base64:");
+            p += 7;
+            outlen -= 7;
 
-		if (base64_len >= (outlen - 1)) {
-			base64_len = outlen - 2;
-		}
+            /* Calculer la taille nécessaire pour l'encodage base64 */
+            base64_len = ((vp->length + 2) / 3) * 4 + 1;
 
-		/* Encoder en base64 */
-		fr_base64_encode(p, outlen, vp->vp_strvalue, vp->length);
-		p += strlen(p);
-	} else {
-		/* Pour JSON, nous devons échapper certains caractères */
-		char *q = p;
+            if (base64_len >= outlen) {
+                base64_len = outlen - 1;
+            }
 
-		/* Allouer suffisamment d'espace pour les caractères échappés */
-		if (special_chars > 0 && (len + special_chars) >= (outlen - 1)) {
-			len = (outlen - 1) - special_chars;
-		}
+            /* Encoder en base64 */
+            unsigned char *buffer_b64 = malloc(base64_len);
+            if (!buffer_b64) {
+                *p = '\0';
+                return p - out;
+            }
 
-		for (i = 0; i < len && q < (out + outlen - 2); i++) {
-			switch (vp->vp_strvalue[i]) {
-				case '\\':
-					*(q++) = '\\';
-					*(q++) = '\\';
-					break;
-				case '"':
-					*(q++) = '\\';
-					*(q++) = '"';
-					break;
-				case '\n':
-					*(q++) = '\\';
-					*(q++) = 'n';
-					break;
-				case '\r':
-					*(q++) = '\\';
-					*(q++) = 'r';
-					break;
-				case '\t':
-					*(q++) = '\\';
-					*(q++) = 't';
-					break;
-				case '\b':
-					*(q++) = '\\';
-					*(q++) = 'b';
-					break;
-				case '\f':
-					*(q++) = '\\';
-					*(q++) = 'f';
-					break;
-				default:
-					*(q++) = vp->vp_strvalue[i];
-					break;
-			}
-		}
-		*q = '\0';
-		p = q;
-	}
-	break;
+            size_t encoded_len = fr_base64_encode((char *)buffer_b64, base64_len, vp->vp_strvalue, vp->length);
+            if (encoded_len > outlen - 1) {
+                encoded_len = outlen - 1;
+            }
 
-	default:
-		sprintf(out, "Unknown type %d", vp->da->type);
-		p += strlen(out);
-		break;
-	}
+            memcpy(p, buffer_b64, encoded_len);
+            free(buffer_b64);
+            p += encoded_len;
+        } else {
+            /* Pour JSON, nous devons échapper certains caractères */
+            char *q = p;
 
-done:
-	*p = '\0';
+            /* Allouer suffisamment d'espace pour les caractères échappés */
+            if (special_chars > 0 && (len + special_chars) >= (outlen - 1)) {
+                len = (outlen - 1) - special_chars;
+            }
 
-	return out;
+            for (i = 0; i < len && q < (out + outlen - 2); i++) {
+                switch (vp->vp_strvalue[i]) {
+                    case '\\':
+                        *(q++) = '\\';
+                        *(q++) = '\\';
+                        break;
+                    case '"':
+                        *(q++) = '\\';
+                        *(q++) = '"';
+                        break;
+                    case '\n':
+                        *(q++) = '\\';
+                        *(q++) = 'n';
+                        break;
+                    case '\r':
+                        *(q++) = '\\';
+                        *(q++) = 'r';
+                        break;
+                    case '\t':
+                        *(q++) = '\\';
+                        *(q++) = 't';
+                        break;
+                    case '\b':
+                        *(q++) = '\\';
+                        *(q++) = 'b';
+                        break;
+                    case '\f':
+                        *(q++) = '\\';
+                        *(q++) = 'f';
+                        break;
+                    default:
+                        *(q++) = vp->vp_strvalue[i];
+                        break;
+                }
+            }
+            *q = '\0';
+            p = q;
+        }
+        break;
+
+		default:
+        snprintf(out, outlen, "Unknown type %d", vp->da->type);
+        p += strlen(out);
+        break;
+    }
+
+    *p = '\0';
+
+    return p - out;
 }
 
 /*
