@@ -25,7 +25,6 @@ RCSID("$Id$")
 #include	<freeradius-devel/libradius.h>
 #include	<freeradius-devel/base64.h>
 #include	<ctype.h>
-#include	<arpa/inet.h>
 
 /** Checks for utf-8, taken from http://www.w3.org/International/questions/qa-forms-utf-8
  *
@@ -685,15 +684,6 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         p += strlen(out);
         break;
 
-    case PW_TYPE_ABINARY:
-#ifdef WITH_ASCEND_BINARY
-        print_abinary(out, outlen, (VALUE_PAIR *)vp, 0);
-#else
-        snprintf(out, outlen, "Ascend binary data");
-#endif
-        p += strlen(out);
-        break;
-
     case PW_TYPE_OCTETS:
         if (outlen < 3) {
             *p = '\0';
@@ -720,27 +710,25 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         break;
 
     case PW_TYPE_IPV6_ADDR:
-        ip_ntop(buffer, sizeof(buffer), AF_INET6,
-            (void const *) &vp->vp_ipv6addr);
+        inet_ntop(AF_INET6, (void const *) &vp->vp_ipv6addr, buffer, sizeof(buffer));
         strlcpy(out, buffer, outlen);
         p += strlen(out);
         break;
 
-    case PW_TYPE_IPV6_PREFIX:
-    {
-        struct in6_addr addr;
+		case PW_TYPE_IPV6_PREFIX:
+		{
+			struct in6_addr addr;
 
-        /*
-         *  Alignment issues.
-         */
-        memcpy(&addr, &vp->vp_ipv6prefix[2], sizeof(addr));
+			/*
+			 *  Alignment issues.
+			 */
+			memcpy(&addr, &vp->vp_ipv6prefix[2], sizeof(addr));
 
-        ip_ntop(buffer, sizeof(buffer), AF_INET6,
-            (void const *) &addr);
-        snprintf(out, outlen, "%s/%u", buffer, vp->vp_ipv6prefix[1]);
-        p += strlen(out);
-    }
-        break;
+			inet_ntop(AF_INET6, (void const *) &addr, buffer, sizeof(buffer));
+			snprintf(out, outlen, "%s/%u", buffer, vp->vp_ipv6prefix[1]);
+			p += strlen(out);
+		}
+			break;
 
     case PW_TYPE_ETHERNET:
         snprintf(out, outlen, "%02x:%02x:%02x:%02x:%02x:%02x",
