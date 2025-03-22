@@ -697,7 +697,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         p += 3;
         outlen -= 3;
 
-        for (len = 0; len < vp->length && outlen > 2; len++) {
+        for (len = 0; len < vp->length && outlen > 3; len++) {
             sprintf(p, "%02x", vp->vp_octets[len]);
             p += 2;
             outlen -= 2;
