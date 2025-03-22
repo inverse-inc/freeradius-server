@@ -673,14 +673,9 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
     case PW_TYPE_DATE:
         date = vp->vp_date;
         localtime_r(&date, &tm);
-        strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z",
-                 &tm);
-        strlcpy(out, buffer, outlen); // Copy the formatted date
-        p += strlen(out);             // Update p to the end of the date string
-
-        *p = '"'; // Add closing double quote after copying the date
-        *(p + 1) = '\0';
-
+        strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z", &tm);
+        snprintf(out, outlen, "\"%s\"", buffer); // Ajout des doubles côtes
+        p += strlen(out);
         break;
 
     case PW_TYPE_IPV4_ADDR:
