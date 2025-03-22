@@ -676,6 +676,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         localtime_r(&date, &tm);
         strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z", &tm);
         len = snprintf(out, outlen, "\"%s\"", buffer);
+        RDEBUG("JSON Date: %s", (char *)out);
         if (len < 0 || len >= outlen) {
             *p = '\0';
             return outlen;
@@ -686,6 +687,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
     case PW_TYPE_IPV4_ADDR:
         ip_ntoa(buffer, vp->vp_ipaddr);
         len = snprintf(out, outlen, "\"%s\"", buffer);
+        RDEBUG("JSON ipv4: %s", (char *)out);
         if (len < 0 || len >= outlen) {
             *p = '\0';
             return outlen;
