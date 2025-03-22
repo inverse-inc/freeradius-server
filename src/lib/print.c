@@ -676,26 +676,33 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         fprintf(stderr, "DEBUG: PW_TYPE_DATE, value: %lu\n", (unsigned long)date);
         localtime_r(&date, &tm);
         strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z", &tm);
-        len = snprintf(out, freespace, "\"%s\"", buffer);
-        if (len < 0 || len >= freespace) {
+        fprintf(stderr, "DEBUG: PW_TYPE_DATE, formatted value: \"%s\"\n", buffer);
+        len = strlen(buffer);
+        if (len + 2 > freespace) {
             *p = '\0';
             return outlen;
         }
-        fprintf(stderr, "DEBUG: PW_TYPE_DATE, result: \"%.*s\"\n", (int)len, out);
+        *p++ = '"';
+        memcpy(p, buffer, len);
         p += len;
+        *p++ = '"';
+        *p = '\0';
         break;
 
     case PW_TYPE_IPV4_ADDR:
         fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, value: %08x\n", vp->vp_ipaddr);
         ip_ntoa(buffer, vp->vp_ipaddr);
         fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, formatted value: \"%s\"\n", buffer);
-        len = snprintf(out, freespace, "\"%s\"", buffer);
-        if (len < 0 || len >= freespace) {
+        len = strlen(buffer);
+        if (len + 2 > freespace) {
             *p = '\0';
             return outlen;
         }
-        fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, result: \"%.*s\"\n", (int)len, out);
+        *p++ = '"';
+        memcpy(p, buffer, len);
         p += len;
+        *p++ = '"';
+        *p = '\0';
         break;
 
     case PW_TYPE_OCTETS:
