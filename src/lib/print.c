@@ -680,11 +680,8 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 
     case PW_TYPE_IPV4_ADDR:
         ip_ntoa(buffer, vp->vp_ipaddr);
-        strlcpy(out, buffer, outlen);
+        snprintf(out, outlen, "\"%s\"", buffer); // Use snprintf to add quotes
         p += strlen(out);
-
-        *p = '"'; // Add closing double quote
-        *(p + 1) = '\0';
 
         break;
 
