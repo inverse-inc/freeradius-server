@@ -24,7 +24,6 @@ RCSID("$Id$")
 
 #include    <freeradius-devel/libradius.h>
 #include    <freeradius-devel/base64.h>
-#include    <freeradius-devel/radiusd.h>
 #include    <ctype.h>
 
 /** Checks for utf-8, taken from http://www.w3.org/International/questions/qa-forms-utf-8
@@ -674,25 +673,29 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 
     case PW_TYPE_DATE:
         date = vp->vp_date;
+        fprintf(stderr, "DEBUG: PW_TYPE_DATE, value: %lu\n", (unsigned long)date);
         localtime_r(&date, &tm);
         strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z", &tm);
+        fprintf(stderr, "DEBUG: PW_TYPE_DATE, formatted value: \"%s\"\n", buffer);
         len = snprintf(out, outlen, "\"%s\"", buffer);
-        RDEBUG("JSON Date: %s", (char *)out);
         if (len < 0 || len >= outlen) {
             *p = '\0';
             return outlen;
         }
+        fprintf(stderr, "DEBUG: PW_TYPE_DATE, result: \"%.*s\"\n", (int)strlen(out), out);
         p += len;
         break;
 
     case PW_TYPE_IPV4_ADDR:
+        fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, value: %08x\n", vp->vp_ipaddr);
         ip_ntoa(buffer, vp->vp_ipaddr);
+        fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, formatted value: \"%s\"\n", buffer);
         len = snprintf(out, outlen, "\"%s\"", buffer);
-        RDEBUG("JSON ipv4: %s", (char *)out);
         if (len < 0 || len >= outlen) {
             *p = '\0';
             return outlen;
         }
+        fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, result: \"%.*s\"\n", (int)strlen(out), out);
         p += len;
         break;
 
