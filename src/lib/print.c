@@ -683,7 +683,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             return outlen;
         }
         fprintf(stderr, "DEBUG: PW_TYPE_DATE, result: \"%.*s\"\n", (int)strlen(out), out);
-        p += strlen(out);
+        p += outlen;
         break;
 
     case PW_TYPE_IPV4_ADDR:
@@ -696,7 +696,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             return outlen;
         }
         fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, result: \"%.*s\"\n", (int)strlen(out), out);
-        p += strlen(out);
+        p += outlen;
         break;
 
     case PW_TYPE_OCTETS:
