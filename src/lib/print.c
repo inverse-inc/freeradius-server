@@ -710,16 +710,19 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             *p = '\0';
             return 0;
         }
-        strcpy(out, "\"0x");
-        p += 3;
+        *p++ = '"';
+        *p++ = '0';
+        *p++ = 'x';
         freespace -= 3;
 
-        for (len = 0; len < vp->length && freespace > 3; len++) {
+        for (len = 0; len < vp->length && freespace > 2; len++) {
             sprintf(p, "%02x", vp->vp_octets[len]);
             p += 2;
             freespace -= 2;
         }
-        *p++ = '"';
+        if (freespace >= 1) {
+            *p++ = '"';
+        }
         *p = '\0';
         break;
 
