@@ -855,8 +855,9 @@ static size_t rest_encode_json(void *out, size_t size, size_t nmemb, void *userd
 				 *  Show actual value length minus quotes
 				 */
 				RINDENT();
-				RDEBUG3("Length : %zu", (size_t) (*p == '"') ? (len - 2) : len);
-				RDEBUG3("Value  : %s", p);
+				RDEBUG("Length : %zu", (size_t) (*p == '"') ? (len - 2) : len);
+				RDEBUG("Value  : %s", p);
+				RDEBUG("p = \"%.*s\"", (int)strlen(p), p);
 				REXDENT();
 
 				p += len;
