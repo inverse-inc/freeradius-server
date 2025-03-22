@@ -575,9 +575,9 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             }
 
             /* Ajouter un préfixe pour indiquer l'encodage base64 */
-            strcpy(p, "base64:");
-            p += 7;
-            outlen -= 7;
+            strcpy(p, "\"base64:");
+            p += 8;
+            outlen -= 8;
 
             /* Calculer la taille nécessaire pour l'encodage base64 */
             base64_len = ((vp->length + 2) / 3) * 4 + 1;
@@ -602,6 +602,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             memcpy(p, buffer_b64, encoded_len);
             free(buffer_b64);
             p += encoded_len;
+            *p++ = '"';
         } else {
             /* Pour JSON, nous devons échapper certains caractères */
             char *q = p;
@@ -675,7 +676,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         localtime_r(&date, &tm);
         strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z", &tm);
         snprintf(out, outlen, "\"%s\"", buffer); // Ajout des doubles côtes
-        p += strlen(out);
+        p += strlen(out) + 1;
         break;
 
     case PW_TYPE_IPV4_ADDR:
