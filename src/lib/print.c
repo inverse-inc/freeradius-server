@@ -676,42 +676,41 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         fprintf(stderr, "DEBUG: PW_TYPE_DATE, value: %lu\n", (unsigned long)date);
         localtime_r(&date, &tm);
         strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z", &tm);
-        fprintf(stderr, "DEBUG: PW_TYPE_DATE, formatted value: \"%s\"\n", buffer);
-        len = snprintf(out, outlen, "\"%s\"", buffer);
-        if (len < 0 || len >= outlen) {
+        len = snprintf(out, freespace, "\"%s\"", buffer);
+        if (len < 0 || len >= freespace) {
             *p = '\0';
             return outlen;
         }
-        fprintf(stderr, "DEBUG: PW_TYPE_DATE, result: \"%.*s\"\n", (int)strlen(out), out);
-        p += strlen(out);
+        fprintf(stderr, "DEBUG: PW_TYPE_DATE, result: \"%.*s\"\n", (int)len, out);
+        p += len;
         break;
 
     case PW_TYPE_IPV4_ADDR:
         fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, value: %08x\n", vp->vp_ipaddr);
         ip_ntoa(buffer, vp->vp_ipaddr);
         fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, formatted value: \"%s\"\n", buffer);
-        len = snprintf(out, outlen, "\"%s\"", buffer);
-        if (len < 0 || len >= outlen) {
+        len = snprintf(out, freespace, "\"%s\"", buffer);
+        if (len < 0 || len >= freespace) {
             *p = '\0';
             return outlen;
         }
-        fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, result: \"%.*s\"\n", (int)strlen(out), out);
-        p += strlen(out);
+        fprintf(stderr, "DEBUG: PW_TYPE_IPV4_ADDR, result: \"%.*s\"\n", (int)len, out);
+        p += len;
         break;
 
     case PW_TYPE_OCTETS:
-        if (outlen < 5) {
+        if (freespace < 5) {
             *p = '\0';
             return 0;
         }
         strcpy(out, "\"0x");
         p += 3;
-        outlen -= 3;
+        freespace -= 3;
 
-        for (len = 0; len < vp->length && outlen > 3; len++) {
+        for (len = 0; len < vp->length && freespace > 3; len++) {
             sprintf(p, "%02x", vp->vp_octets[len]);
             p += 2;
-            outlen -= 2;
+            freespace -= 2;
         }
         *p++ = '"';
         *p = '\0';
