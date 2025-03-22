@@ -24,6 +24,7 @@ RCSID("$Id$")
 
 #include    <freeradius-devel/libradius.h>
 #include    <freeradius-devel/base64.h>
+#include    <freeradius-devel/radiusd.h>
 #include    <ctype.h>
 
 /** Checks for utf-8, taken from http://www.w3.org/International/questions/qa-forms-utf-8
