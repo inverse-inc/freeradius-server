@@ -610,7 +610,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             if (special_chars > 0 && (len + special_chars + 2) >= outlen) {
                 len = outlen - special_chars - 3;
             }
-
+            *q++ = '"';
             for (i = 0; i < len && q < (out + outlen - 2); i++) {
                 switch (vp->vp_strvalue[i]) {
                     case '\\':
@@ -646,6 +646,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
                         break;
                 }
             }
+            *q++ = '"';
             p = q;
         }
         break;
@@ -672,16 +673,24 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
     case PW_TYPE_DATE:
         date = vp->vp_date;
         localtime_r(&date, &tm);
-        strftime(buffer, sizeof(buffer), "\"%b %e %Y %H:%M:%S %Z\"",
-             &tm);
-        strlcpy(out, buffer, outlen);
-        p += strlen(out);
+        strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z",
+                 &tm);
+        strlcpy(out, buffer, outlen); // Copy the formatted date
+        p += strlen(out);             // Update p to the end of the date string
+
+        *p = '"'; // Add closing double quote after copying the date
+        *(p + 1) = '\0';
+
         break;
 
     case PW_TYPE_IPV4_ADDR:
         ip_ntoa(buffer, vp->vp_ipaddr);
-        snprintf(out, outlen, "\"%s\"", buffer);
+        strlcpy(out, buffer, outlen);
         p += strlen(out);
+
+        *p = '"'; // Add closing double quote
+        *(p + 1) = '\0';
+
         break;
 
     case PW_TYPE_OCTETS:
