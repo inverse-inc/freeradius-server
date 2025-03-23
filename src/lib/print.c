@@ -667,8 +667,17 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         break;
 
     case PW_TYPE_INTEGER64:
-        snprintf(out, outlen, "\"%" PRId64 "\"", vp->vp_integer64);
-        p += strlen(out);
+        len = snprintf(buffer, sizeof(buffer), "\"%" PRId64 "\"", vp->vp_integer64);
+        if (len < 0 || (size_t)len >= sizeof(buffer)) {
+            *p = '\0';
+            return outlen;
+        }
+        if (len + 1 > freespace) {
+            *p = '\0';
+            return outlen;
+        }
+        strcpy(p, buffer);
+        p += len;
         break;
 
     case PW_TYPE_DATE:
@@ -727,18 +736,36 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         break;
 
     case PW_TYPE_IFID:
-        snprintf(out, outlen, "\"%x:%x:%x:%x\"",
+        len = snprintf(buffer, sizeof(buffer), "\"%x:%x:%x:%x\"",
             (vp->vp_ifid[0] << 8) | vp->vp_ifid[1],
             (vp->vp_ifid[2] << 8) | vp->vp_ifid[3],
             (vp->vp_ifid[4] << 8) | vp->vp_ifid[5],
             (vp->vp_ifid[6] << 8) | vp->vp_ifid[7]);
-        p += strlen(out);
+        if (len < 0 || (size_t)len >= sizeof(buffer)) {
+            *p = '\0';
+            return outlen;
+        }
+        if (len + 1 > freespace) {
+            *p = '\0';
+            return outlen;
+        }
+        strcpy(p, buffer);
+        p += len;
         break;
 
     case PW_TYPE_IPV6_ADDR:
         inet_ntop(AF_INET6, (void const *) &vp->vp_ipv6addr, buffer, sizeof(buffer));
-        snprintf(out, outlen, "\"%s\"", buffer);
-        p += strlen(out);
+        fprintf(stderr, "DEBUG: PW_TYPE_IPV6_ADDR, value: %s\n", buffer);
+        len = strlen(buffer);
+        if (len + 2 > freespace) {
+            *p = '\0';
+            return outlen;
+        }
+        *p++ = '"';
+        memcpy(p, buffer, len);
+        p += len;
+        *p++ = '"';
+        *p = '\0';
         break;
 
     case PW_TYPE_IPV6_PREFIX:
@@ -751,17 +778,36 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             memcpy(&addr, &vp->vp_ipv6prefix[2], sizeof(addr));
 
             inet_ntop(AF_INET6, (void const *) &addr, buffer, sizeof(buffer));
-            snprintf(out, outlen, "\"%s/%u\"", buffer, vp->vp_ipv6prefix[1]);
-            p += strlen(out);
+            fprintf(stderr, "DEBUG: PW_TYPE_IPV6_PREFIX, value: %s/%u\n", buffer, vp->vp_ipv6prefix[1]);
+            len = snprintf(buffer, sizeof(buffer), "\"%s/%u\"", buffer, vp->vp_ipv6prefix[1]);
+            if (len < 0 || (size_t)len >= sizeof(buffer)) {
+                *p = '\0';
+                return outlen;
+            }
+            if (len + 1 > freespace) {
+                *p = '\0';
+                return outlen;
+            }
+            strcpy(p, buffer);
+            p += len;
         }
         break;
 
     case PW_TYPE_ETHERNET:
-        snprintf(out, outlen, "\"%02x:%02x:%02x:%02x:%02x:%02x\"",
+        len = snprintf(buffer, sizeof(buffer), "\"%02x:%02x:%02x:%02x:%02x:%02x\"",
             vp->vp_ether[0], vp->vp_ether[1],
             vp->vp_ether[2], vp->vp_ether[3],
             vp->vp_ether[4], vp->vp_ether[5]);
-        p += strlen(out);
+        if (len < 0 || (size_t)len >= sizeof(buffer)) {
+            *p = '\0';
+            return outlen;
+        }
+        if (len + 1 > freespace) {
+            *p = '\0';
+            return outlen;
+        }
+        strcpy(p, buffer);
+        p += len;
         break;
 
     case PW_TYPE_TLV:
@@ -770,8 +816,17 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
         break;
 
     case PW_TYPE_SIGNED:
-        snprintf(out, outlen, "\"%d\"", vp->vp_signed);
-        p += strlen(out);
+        len = snprintf(buffer, sizeof(buffer), "\"%d\"", vp->vp_signed);
+        if (len < 0 || (size_t)len >= sizeof(buffer)) {
+            *p = '\0';
+            return outlen;
+        }
+        if (len + 1 > freespace) {
+            *p = '\0';
+            return outlen;
+        }
+        strcpy(p, buffer);
+        p += len;
         break;
 
     default:
