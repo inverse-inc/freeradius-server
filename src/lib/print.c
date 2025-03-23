@@ -783,12 +783,15 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
                 *p = '\0';
                 return outlen;
             }
-            len = snprintf(out, freespace, "\"%s\"", buffer);
-            if (len < 0 || (size_t)len >= freespace) {
+            if (strlen(buffer) + 2 > freespace) {
                 *p = '\0';
                 return outlen;
             }
-            p += len;
+            *p++ = '"';
+            strcpy(p, buffer);
+            p += strlen(buffer);
+            *p++ = '"';
+            *p = '\0';
         }
         break;
 
