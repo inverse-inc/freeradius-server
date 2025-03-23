@@ -778,17 +778,16 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
             memcpy(&addr, &vp->vp_ipv6prefix[2], sizeof(addr));
 
             inet_ntop(AF_INET6, (void const *) &addr, buffer, sizeof(buffer));
-            fprintf(stderr, "DEBUG: PW_TYPE_IPV6_PREFIX, value: %s/%u\n", buffer, vp->vp_ipv6prefix[1]);
-            len = snprintf(buffer, sizeof(buffer), "\"%s/%u\"", buffer, vp->vp_ipv6prefix[1]);
-            if (len < 0 || (size_t)len >= sizeof(buffer)) {
+            len = snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer), "/%u", vp->vp_ipv6prefix[1]);
+            if (len < 0 || (size_t)len >= sizeof(buffer) - strlen(buffer)) {
                 *p = '\0';
                 return outlen;
             }
-            if (len + 1 > freespace) {
+            len = snprintf(out, freespace, "\"%s\"", buffer);
+            if (len < 0 || (size_t)len >= freespace) {
                 *p = '\0';
                 return outlen;
             }
-            strcpy(p, buffer);
             p += len;
         }
         break;
