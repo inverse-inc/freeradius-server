@@ -500,27 +500,33 @@ char *vp_aprints_type(TALLOC_CTX *ctx, PW_TYPE type)
  */
 size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool raw_value)
 {
-	char const	*q;
-	size_t		len, freespace = outlen;
+	char *p;
+	size_t len, freespace = outlen;
+	time_t date;
+	struct tm tm;
+	char buffer[256];
+	DICT_VALUE *dval;
+
 	/* attempt to print raw_value when has_value is false, or raw_value is false, but only
-	   if has_tag is also false */
-	bool		raw = (raw_value || !vp->da->flags.has_value) && !vp->da->flags.has_tag;
+		if has_tag is also false */
+	bool raw = (raw_value || !vp->da->flags.has_value) && !vp->da->flags.has_tag;
 
 	if (raw) {
 		switch (vp->da->type) {
 		case PW_TYPE_INTEGER:
-			return snprintf(out, freespace, "%u", vp->vp_integer);
+			return snprintf(out, freespace, "\"%u\"", vp->vp_integer);
 
 		case PW_TYPE_SHORT:
-			return snprintf(out, freespace, "%u", (unsigned int) vp->vp_short);
+			return snprintf(out, freespace, "\"%u\"", (unsigned int)vp->vp_short);
 
 		case PW_TYPE_BYTE:
-			return snprintf(out, freespace, "%u", (unsigned int) vp->vp_byte);
+			return snprintf(out, freespace, "\"%u\"", (unsigned int)vp->vp_byte);
 
 		default:
 			break;
 		}
 	}
+	p = out;
 
 	/* Indicate truncation */
 	if (freespace < 2) return outlen + 1;
@@ -529,79 +535,311 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 
 	switch (vp->da->type) {
 	case PW_TYPE_STRING:
-		for (q = vp->vp_strvalue; q < vp->vp_strvalue + vp->vp_length; q++) {
-			/* Indicate truncation */
-			if (freespace < 3) return outlen + 1;
+		len = vp->length;
 
-			if (*q == '"') {
-				*out++ = '\\';
-				*out++ = '"';
-				freespace -= 2;
-			} else if (*q == '\\') {
-				*out++ = '\\';
-				*out++ = '\\';
-				freespace -= 2;
-			} else if (*q == '/') {
-				*out++ = '\\';
-				*out++ = '/';
-				freespace -= 2;
-			} else if (*q >= ' ') {
-				*out++ = *q;
-				freespace--;
-			} else {
-				*out++ = '\\';
-				freespace--;
+		if (len >= (outlen - 2)) {
+			len = outlen - 3;
+		}
 
-				switch (*q) {
-				case '\b':
-					*out++ = 'b';
-					freespace--;
-					break;
+		/* Non ASCII verification */
+		int has_non_ascii = 0;
+		int special_chars = 0;
+		int i;
 
-				case '\f':
-					*out++ = 'f';
-					freespace--;
-					break;
+		for (i = 0; i < len; i++) {
+			if (vp->vp_strvalue[i] < 32 || vp->vp_strvalue[i] > 126) {
+				has_non_ascii = 1;
+				break;
+			}
 
-				case '\n':
-					*out++ = 'n';
-					freespace--;
-					break;
+			/* Needs to be escaped for JSON */
+			if (vp->vp_strvalue[i] == '\\' ||
+				vp->vp_strvalue[i] == '"' ||
+				vp->vp_strvalue[i] == '\n' ||
+				vp->vp_strvalue[i] == '\r' ||
+				vp->vp_strvalue[i] == '\t' ||
+				vp->vp_strvalue[i] == '\b' ||
+				vp->vp_strvalue[i] == '\f') {
+				special_chars++;
+			}
+		}
 
-				case '\r':
-					*out++ = 'r';
-					freespace--;
-					break;
+		/* If non ASCII char then encode in base64 */
+		if (has_non_ascii) {
+			size_t base64_len;
 
-				case '\t':
-					*out++ = 't';
-					freespace--;
-					break;
-				default:
-					len = snprintf(out, freespace, "u%04X", (uint8_t) *q);
-					if (is_truncated(len, freespace)) return (outlen - freespace) + len;
-					out += len;
-					freespace -= len;
+			/* Check if there enough space to add prefix "base64:" */
+			if (outlen < 8) {
+				*p = '\0';
+				return 0;
+			}
+
+			/* Add prefix to indicate base64 encoded */
+			strcpy(p, "\"base64:");
+			p += 8;
+			outlen -= 8;
+
+			/* Calculate the nescessary size for base64 encode */
+			base64_len = ((vp->length + 2) / 3) * 4 + 1;
+
+			if ((base64_len + 1) >= outlen) {
+				base64_len = outlen - 2;
+			}
+
+			/* base64 encode */
+			unsigned char *buffer_b64 = malloc(base64_len);
+			if (!buffer_b64) {
+				*p = '\0';
+				return p - out;
+			}
+
+			size_t encoded_len = fr_base64_encode((char *)buffer_b64, base64_len, (uint8_t const *)vp->vp_strvalue, vp->length);
+
+			if ((encoded_len + 1) >= outlen) {
+				encoded_len = outlen - 2;
+			}
+
+			memcpy(p, buffer_b64, encoded_len);
+			free(buffer_b64);
+			p += encoded_len;
+			*p++ = '"';
+		} else {
+			/* For JSON, we have to escape specific char */
+			char *q = p;
+
+			/* Allocate enough space for escaped chars */
+			if (special_chars > 0 && (len + special_chars + 2) >= outlen) {
+				len = outlen - special_chars - 3;
+			}
+			*q++ = '"';
+			for (i = 0; i < len && q < (out + outlen - 2); i++) {
+				switch (vp->vp_strvalue[i]) {
+					case '\\':
+						*(q++) = '\\';
+						*(q++) = '\\';
+						break;
+					case '"':
+						*(q++) = '\\';
+						*(q++) = '"';
+						break;
+					case '\n':
+						*(q++) = '\\';
+						*(q++) = 'n';
+						break;
+					case '\r':
+						*(q++) = '\\';
+						*(q++) = 'r';
+						break;
+					case '\t':
+						*(q++) = '\\';
+						*(q++) = 't';
+						break;
+					case '\b':
+						*(q++) = '\\';
+						*(q++) = 'b';
+						break;
+					case '\f':
+						*(q++) = '\\';
+						*(q++) = 'f';
+						break;
+					default:
+						*(q++) = vp->vp_strvalue[i];
+						break;
 				}
 			}
+			*q++ = '"';
+			p = q;
 		}
 		break;
 
+	case PW_TYPE_INTEGER:
+		if (vp->da->flags.has_value) {
+			dval = dict_valbyattr(vp->da->attr, vp->da->vendor,
+						vp->vp_integer);
+			if (dval) {
+				snprintf(out, outlen, "\"%s\"", dval->name);
+				p += strlen(out);
+				break;
+			}
+		}
+		snprintf(out, outlen, "\"%u\"", vp->vp_integer);
+		p += strlen(out);
+		break;
+
+	case PW_TYPE_INTEGER64:
+		len = snprintf(buffer, sizeof(buffer), "\"%" PRId64 "\"", vp->vp_integer64);
+		if (len < 0 || (size_t)len >= sizeof(buffer)) {
+			*p = '\0';
+			return outlen;
+		}
+		if (len + 1 > freespace) {
+			*p = '\0';
+			return outlen;
+		}
+		strcpy(p, buffer);
+		p += len;
+		break;
+
+	case PW_TYPE_DATE:
+		date = vp->vp_date;
+		localtime_r(&date, &tm);
+		strftime(buffer, sizeof(buffer), "%b %e %Y %H:%M:%S %Z", &tm);
+		len = strlen(buffer);
+		if (len + 2 > freespace) {
+			*p = '\0';
+			return outlen;
+		}
+		*p++ = '"';
+		memcpy(p, buffer, len);
+		p += len;
+		*p++ = '"';
+		*p = '\0';
+		break;
+
+	case PW_TYPE_IPV4_ADDR:
+		ip_ntoa(buffer, vp->vp_ipaddr);
+		len = strlen(buffer);
+		if (len + 2 > freespace) {
+			*p = '\0';
+			return outlen;
+		}
+		*p++ = '"';
+		memcpy(p, buffer, len);
+		p += len;
+		*p++ = '"';
+		*p = '\0';
+		break;
+
+	case PW_TYPE_OCTETS:
+		if (freespace < 5) {
+			*p = '\0';
+			return 0;
+		}
+		*p++ = '"';
+		*p++ = '0';
+		*p++ = 'x';
+		freespace -= 3;
+
+		for (len = 0; len < vp->length && freespace > 2; len++) {
+			sprintf(p, "%02x", vp->vp_octets[len]);
+			p += 2;
+			freespace -= 2;
+		}
+		if (freespace >= 1) {
+			*p++ = '"';
+		}
+		*p = '\0';
+		break;
+
+	case PW_TYPE_IFID:
+		len = snprintf(buffer, sizeof(buffer), "\"%x:%x:%x:%x\"",
+			(vp->vp_ifid[0] << 8) | vp->vp_ifid[1],
+			(vp->vp_ifid[2] << 8) | vp->vp_ifid[3],
+			(vp->vp_ifid[4] << 8) | vp->vp_ifid[5],
+			(vp->vp_ifid[6] << 8) | vp->vp_ifid[7]);
+		if (len < 0 || (size_t)len >= sizeof(buffer)) {
+			*p = '\0';
+			return outlen;
+		}
+		if (len + 1 > freespace) {
+			*p = '\0';
+			return outlen;
+		}
+		strcpy(p, buffer);
+		p += len;
+		break;
+
+	case PW_TYPE_IPV6_ADDR:
+		inet_ntop(AF_INET6, (void const *) &vp->vp_ipv6addr, buffer, sizeof(buffer));
+		len = strlen(buffer);
+		if (len + 2 > freespace) {
+			*p = '\0';
+			return outlen;
+		}
+		*p++ = '"';
+		memcpy(p, buffer, len);
+		p += len;
+		*p++ = '"';
+		*p = '\0';
+		break;
+
+	case PW_TYPE_IPV6_PREFIX:
+		{
+			struct in6_addr addr;
+
+			/*
+			 *  Alignment issues.
+			 */
+			memcpy(&addr, &vp->vp_ipv6prefix[2], sizeof(addr));
+
+			inet_ntop(AF_INET6, (void const *) &addr, buffer, sizeof(buffer));
+			len = snprintf(buffer + strlen(buffer), sizeof(buffer) - strlen(buffer), "/%u", vp->vp_ipv6prefix[1]);
+			if (len < 0 || (size_t)len >= sizeof(buffer) - strlen(buffer)) {
+				*p = '\0';
+				return outlen;
+			}
+			if (strlen(buffer) + 2 > freespace) {
+				*p = '\0';
+				return outlen;
+			}
+			*p++ = '"';
+			strcpy(p, buffer);
+			p += strlen(buffer);
+			*p++ = '"';
+			*p = '\0';
+		}
+		break;
+
+	case PW_TYPE_ETHERNET:
+		len = snprintf(buffer, sizeof(buffer), "\"%02x:%02x:%02x:%02x:%02x:%02x\"",
+			vp->vp_ether[0], vp->vp_ether[1],
+			vp->vp_ether[2], vp->vp_ether[3],
+			vp->vp_ether[4], vp->vp_ether[5]);
+		if (len < 0 || (size_t)len >= sizeof(buffer)) {
+			*p = '\0';
+			return outlen;
+		}
+		if (len + 1 > freespace) {
+			*p = '\0';
+			return outlen;
+		}
+		strcpy(p, buffer);
+		p += len;
+		break;
+
+	case PW_TYPE_TLV:
+		snprintf(out, outlen, "\"Vendor TLV: %zu bytes\"", vp->length);
+		p += strlen(out);
+		break;
+
+	case PW_TYPE_SIGNED:
+		len = snprintf(buffer, sizeof(buffer), "\"%d\"", vp->vp_signed);
+		if (len < 0 || (size_t)len >= sizeof(buffer)) {
+			*p = '\0';
+			return outlen;
+		}
+		if (len + 1 > freespace) {
+			*p = '\0';
+			return outlen;
+		}
+		strcpy(p, buffer);
+		p += len;
+		break;
+
 	default:
-		len = vp_prints_value(out, freespace, vp, 0);
-		if (is_truncated(len, freespace)) return (outlen - freespace) + len;
+		len = vp_prints_value(out, outlen, vp, 0);
+		if (len < 0 || len >= outlen) {
+			snprintf(out, outlen, "\"Unknown type %d\"", vp->da->type);
+			return outlen;
+		}
 		out += len;
-		freespace -= len;
+		outlen -= len;
 		break;
 	}
 
-	/* Indicate truncation */
-	if (freespace < 2) return outlen + 1;
-	*out++ = '"';
-	freespace--;
-	*out = '\0'; // We don't increment out, because the nul byte should not be included in the length
+	*p = '\0';
 
-	return outlen - freespace;
+	return p - out + 1;
 }
 
 /*
