@@ -848,7 +848,7 @@ static size_t rest_encode_json(void *out, size_t size, size_t nmemb, void *userd
 				 *  write that out.
 				 */
 				attr_space = fr_cursor_next_peek(&ctx->cursor) ? freespace - 1 : freespace;
-				len = vp_prints_value_json(p, attr_space + 1, vp, ctx->section->raw_value);
+				len = vp_prints_value_json(p, attr_space + 1, vp, ctx->section->raw_value, ctx->section->base64_nonascii);
 				if (is_truncated(len, attr_space + 1)) goto no_space;
 
 				/*
