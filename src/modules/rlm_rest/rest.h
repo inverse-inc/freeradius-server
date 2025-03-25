@@ -127,6 +127,7 @@ typedef struct rlm_rest_section_t {
 
 	bool			attr_num;	//!< If true, the the attribute number is supplied for each attribute.
 	bool			raw_value;	//!< If true, enumerated attributes are provided as a numeric value
+	bool			base64_nonascii;	//!< If true, strings and binary with nonascii characters are base64
 
 	char const		*force_to_str;	//!< Force decoding with this decoder.
 	http_body_type_t	force_to;	//!< Override the Content-Type header in the response
