@@ -498,7 +498,7 @@ char *vp_aprints_type(TALLOC_CTX *ctx, PW_TYPE type)
  * @param raw_value if true, the raw value is printed and not the enumerated attribute value
  * @return the length of data written to out, or a value >= outlen on truncation.
  */
-size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool raw_value)
+size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool raw_value, bool base64_nonascii)
 {
 	char *p;
 	size_t len, freespace = outlen;
@@ -545,25 +545,25 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 		int has_non_ascii = 0;
 		int special_chars = 0;
 		int i;
+        if (base64_nonascii) {
+		    for (i = 0; i < len; i++) {
+			    if (vp->vp_strvalue[i] < 32 || vp->vp_strvalue[i] > 126) {
+				    has_non_ascii = 1;
+				    break;
+			    }
 
-		for (i = 0; i < len; i++) {
-			if (vp->vp_strvalue[i] < 32 || vp->vp_strvalue[i] > 126) {
-				has_non_ascii = 1;
-				break;
-			}
-
-			/* Needs to be escaped for JSON */
-			if (vp->vp_strvalue[i] == '\\' ||
-				vp->vp_strvalue[i] == '"' ||
-				vp->vp_strvalue[i] == '\n' ||
-				vp->vp_strvalue[i] == '\r' ||
-				vp->vp_strvalue[i] == '\t' ||
-				vp->vp_strvalue[i] == '\b' ||
-				vp->vp_strvalue[i] == '\f') {
-				special_chars++;
-			}
-		}
-
+			    /* Needs to be escaped for JSON */
+			    if (vp->vp_strvalue[i] == '\\' ||
+				    vp->vp_strvalue[i] == '"' ||
+				    vp->vp_strvalue[i] == '\n' ||
+				    vp->vp_strvalue[i] == '\r' ||
+				    vp->vp_strvalue[i] == '\t' ||
+				    vp->vp_strvalue[i] == '\b' ||
+				    vp->vp_strvalue[i] == '\f') {
+				    special_chars++;
+			    }
+		    }
+	    }
 		/* If non ASCII char then encode in base64 */
 		if (has_non_ascii) {
 			size_t base64_len;
