@@ -454,6 +454,7 @@ int		fr_check_lib_magic(uint64_t magic);
  */
 int		fr_utf8_char(uint8_t const *str, ssize_t inlen);
 char const     	*fr_utf8_strchr(int *chr_len, char const *str, char const *chr);
+bool		fr_str_isascii(const char* str, size_t inlen);
 size_t		fr_prints(char *out, size_t outlen, char const *in, ssize_t inlen, char quote);
 size_t		fr_prints_len(char const *in, ssize_t inlen, char quote);
 char		*fr_aprints(TALLOC_CTX *ctx, char const *in, ssize_t inlen, char quote);
@@ -465,7 +466,7 @@ size_t   	vp_prints_value(char *out, size_t outlen, VALUE_PAIR const *vp, char q
 
 char     	*vp_aprints_value(TALLOC_CTX *ctx, VALUE_PAIR const *vp, char quote);
 
-size_t    	vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool raw_value);
+size_t    	vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool raw_value, bool base64_nonascii);
 size_t		vp_prints(char *out, size_t outlen, VALUE_PAIR const *vp);
 void		vp_print(FILE *, VALUE_PAIR const *);
 void		vp_printlist(FILE *, VALUE_PAIR const *);
