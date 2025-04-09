@@ -529,6 +529,7 @@ size_t vp_prints_value_json(char *out, size_t outlen, VALUE_PAIR const *vp, bool
 		case PW_TYPE_STRING:
 		case PW_TYPE_OCTETS:
 			base64 = !fr_str_isascii(vp->vp_strvalue, vp->length);
+			break;
 		default:
 			break;
 		}
