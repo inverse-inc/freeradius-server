@@ -1642,78 +1642,70 @@ int rad_vp2rfc(RADIUS_PACKET const *packet,
 		uint8_t const *end = ptr + room;
 		uint8_t *p, *attr = ptr;
 		bool zero = false;
+		uint8_t rule_buffer[1024] = {0};
+		size_t rule_len = 0;
+		VALUE_PAIR *current = vp;
+
+		while (current && !current->da->vendor && (current->da->attr == PW_NAS_FILTER_RULE)) {
+			if ((rule_len + current->vp_length + 1) >= sizeof(rule_buffer)) {
+				break;
+			}
+
+			if (rule_len > 0) {
+				rule_buffer[rule_len++] = 0;
+			}
+			memcpy(rule_buffer + rule_len, current->vp_octets, current->vp_length);
+			rule_len += current->vp_length;
+
+			current = current->next;
+		}
 
 		attr[0] = PW_NAS_FILTER_RULE;
 		attr[1] = 2;
 		p = ptr + 2;
 
-		while (vp && !vp->da->vendor && (vp->da->attr == PW_NAS_FILTER_RULE)) {
-			if ((p + zero + vp->vp_length) > end) {				
-				break;
+		size_t offset = 0;
+		while (offset < rule_len) {
+			size_t rule_start = offset;
+			size_t next_rule = rule_start;
+			while (next_rule < rule_len && rule_buffer[next_rule] != 0) {
+				next_rule++;
 			}
 
-			if (zero) {
-				if (attr[1] == 255) {
-					attr = p;
-					if ((attr + 3) >= end) break;
-
-					attr[0] = PW_NAS_FILTER_RULE;
-					attr[1] = 2;
-					p = attr + 2;
-				}
-
-				*(p++) = 0;
-				attr[1]++;
-			}
-
-			/*
-			 *	Check for overflow
-			 */
-			if ((attr[1] + vp->vp_length) < 255) {
-				memcpy(p, vp->vp_strvalue, vp->vp_length);
-				attr[1] += vp->vp_length;
-				p += vp->vp_length;
-
-			} else if (attr + (attr[1] + 2 + vp->vp_length) > end) {
-				break;
-
-			} else if (vp->vp_length > 253) {
-				/*
-				 *	Drop VPs which are too long.
-				 *	We don't (yet) split one VP
-				 *	across multiple attributes.
-				 */
-				vp = vp->next;
+			size_t this_rule_len = next_rule - rule_start;
+			if (this_rule_len == 0) {
+				offset = next_rule + 1;
 				continue;
+			}
 
-			} else {
-				size_t first, second;
-
-				first = 255 - attr[1];
-				second = vp->vp_length - first;
-
-				memcpy(p, vp->vp_strvalue, first);
-				p += first;
-				attr[1] = 255;
+			size_t space_left = 255 - attr[1];
+			if (space_left < this_rule_len + (zero ? 1 : 0)) {
 				attr = p;
+				if ((attr + 2) >= end) {
+					break;				}
 
 				attr[0] = PW_NAS_FILTER_RULE;
 				attr[1] = 2;
 				p = attr + 2;
-
-				memcpy(p, vp->vp_strvalue + first, second);
-				attr[1] += second;
-				p += second;
+				zero = false;
 			}
 
-			vp = vp->next;
+			if (zero) {
+				*(p++) = 0;
+				attr[1]++;
+			}
+
+			memcpy(p, rule_buffer + rule_start, this_rule_len);
+			p += this_rule_len;
+			attr[1] += this_rule_len;
+
+			offset = next_rule + 1;
 			zero = true;
 		}
 
-		*pvp = vp;
+		*pvp = current;
 		return p - ptr;
 	}
-
 	/*
 	 *	EAP-Message is special.
 	 */
@@ -3301,7 +3293,7 @@ static ssize_t data2vp_nas_filter_rule(TALLOC_CTX *ctx,
 		fr_strerror_printf("decode NAS-Filter-Rule: Out of memory");
 		return -1;
 	}
-				
+
 	fr_pair_value_bstrncpy(vp, buffer, q - buffer);
 
 	*pvp = vp;
@@ -3708,7 +3700,7 @@ static ssize_t data2vp_wimax(TALLOC_CTX *ctx,
 	 *	+ continuation, it's a bad attribute.
 	 */
 	if (attrlen < 8) {
-	raw:		
+	raw:
 		/*
 		 *	It's not a Vendor-Specific, it's unknown...
 		 */
