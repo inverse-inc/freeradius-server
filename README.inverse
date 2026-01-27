@@ -1,0 +1,40 @@
+This document describes how to update the inverse-inc/Akamai (PacketFence) fork of FreeRADIUS to a newer upstream release.
+
+
+# Get the latest source
+
+## Starting from scratch (fresh clone)
+
+```bash
+git clone https://github.com/FreeRADIUS/freeradius-server
+cd freeradius-server
+git remote add inverse-inc https://github.com/inverse-inc/freeradius-server
+git fetch --all
+```
+
+## From an existing clone
+
+```bash
+cd <PATH_TO_REPO>
+git fetch --all
+```
+
+# Update to a new upstream version
+
+Assume the new upstream release is `3.2.8` and the current PacketFence branch is based on `3.2.7`.
+
+
+Create a new branch for the new PacketFence version (based on the new upstream release branch/tag):
+```bash
+git branch feature/PacketFence_3.2.8 release_3_2_8
+```
+
+Cherry-pick the PacketFence-specific commits from the previous version onto the new branch:
+```bash
+git checkout feature/PacketFence_3.2.8
+git cherry-pick release_3_2_7..feature/PacketFence_3.2.7
+```
+
+Notes:
+- If the previous PacketFence branch contains merge commits, `git cherry-pick` may ask for a mainline parent; in that case, use `git cherry-pick -m <parent>` for the specific merge commit(s) as needed.
+- Replace version numbers/branch names to match the upstream naming used in this repo (e.g. tags vs release branches).
