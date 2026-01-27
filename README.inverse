@@ -1,7 +1,8 @@
+# Updating the PacketFence fork
+
 This document describes how to update the inverse-inc/Akamai (PacketFence) fork of FreeRADIUS to a newer upstream release.
 
-
-# Get the latest source
+## Get the latest source
 
 ## Starting from scratch (fresh clone)
 
@@ -19,19 +20,20 @@ cd <PATH_TO_REPO>
 git fetch --all
 ```
 
-# Update to a new upstream version
+## Update to a new upstream version
 
 Assume the new upstream release is `3.2.8` and the current PacketFence branch is based on `3.2.7`.
 
 
 Create a new branch for the new PacketFence version (based on the new upstream release branch/tag):
+
 ```bash
-git branch feature/PacketFence_3.2.8 release_3_2_8
+git checkout -B feature/PacketFence_3.2.8 release_3_2_8
 ```
 
 Cherry-pick the PacketFence-specific commits from the previous version onto the new branch:
+
 ```bash
-git checkout feature/PacketFence_3.2.8
 git cherry-pick release_3_2_7..feature/PacketFence_3.2.7
 ```
 
@@ -39,45 +41,53 @@ Notes:
 - If the previous PacketFence branch contains merge commits, `git cherry-pick` may ask for a mainline parent; in that case, use `git cherry-pick -m <parent>` for the specific merge commit(s) as needed.
 - Replace version numbers/branch names to match the upstream naming used in this repo (e.g. tags vs release branches).
 
-## Packages Build
+After resolving conflicts and validating the build/tests, push the new branch:
 
-There is a server available on Linode with all the nescessary scripts to build the packages for RHEL 8 and Debian 12.
+```bash
+git push -u inverse-inc feature/PacketFence_3.2.8
+```
 
-The server is available on ssh username@hq.inverse.ca -p 2222 (FreeRADIUS-Build (root@172.105.106.229:22)) or if your key is directly on the build server you can try to ssh directly into it (172.105.106.229)
+## Building packages
+
+An internal build server is available with scripts to build packages for RHEL 8 and Debian 12.
+
+Connect using SSH (internal):
+
+```bash
+ssh <username>@hq.inverse.ca -p 2222
+```
+
+If your key is already authorized on the build server, direct access may also work (internal IP): `172.105.106.229`.
 
 
 ### RHEL
 
-Once connected, go in /root/build and you will see a Dockerfile.
-Edit the file and change the github branch you want to build:
+Once connected, go to `/root/build` and edit `Dockerfile` to change the GitHub branch you want to build:
 
-```
+```Dockerfile
 ARG release=feature/PacketFence_3.2.8
 ```
 
-Once done, save and run the following command:
+Then build the container:
 
-```
+```bash
 docker build . --build-arg ssh_prv_key="$(cat ./id_rsa)" --build-arg ssh_pub_key="$(cat ./id_rsa.pub)" --no-cache -t freeradius-3.2.8
 ```
 
-If the compilation works, the packages will available in /home/rsync/rpm/release/
+If the compilation succeeds, the packages will be available in `/home/rsync/rpm/release/`.
 
 ### Debian
 
-Once connected, go in /root/builddebian and you will see a Dockerfile.
-Edit the file and change the github branch you want to build:
+Once connected, go to `/root/builddebian` and edit `Dockerfile` to change the GitHub branch you want to build:
 
-```
+```Dockerfile
 ARG release=feature/PacketFence_3.2.8
 ```
 
-Once done, save and run the following command:
+Then build the container:
 
-```
+```bash
 docker build . --build-arg ssh_prv_key="$(cat ./id_rsa)" --build-arg ssh_pub_key="$(cat ./id_rsa.pub)" --no-cache -t freeradius-3.2.8
 ```
 
-If the compilation works, the packages will available in /home/rsync/debian/release/
-
-
+If the compilation succeeds, the packages will be available in `/home/rsync/debian/release/`.
