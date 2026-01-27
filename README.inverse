@@ -38,3 +38,46 @@ git cherry-pick release_3_2_7..feature/PacketFence_3.2.7
 Notes:
 - If the previous PacketFence branch contains merge commits, `git cherry-pick` may ask for a mainline parent; in that case, use `git cherry-pick -m <parent>` for the specific merge commit(s) as needed.
 - Replace version numbers/branch names to match the upstream naming used in this repo (e.g. tags vs release branches).
+
+## Packages Build
+
+There is a server available on Linode with all the nescessary scripts to build the packages for RHEL 8 and Debian 12.
+
+The server is available on ssh username@hq.inverse.ca -p 2222 (FreeRADIUS-Build (root@172.105.106.229:22)) or if your key is directly on the build server you can try to ssh directly into it (172.105.106.229)
+
+
+### RHEL
+
+Once connected, go in /root/build and you will see a Dockerfile.
+Edit the file and change the github branch you want to build:
+
+```
+ARG release=feature/PacketFence_3.2.8
+```
+
+Once done, save and run the following command:
+
+```
+docker build . --build-arg ssh_prv_key="$(cat ./id_rsa)" --build-arg ssh_pub_key="$(cat ./id_rsa.pub)" --no-cache -t freeradius-3.2.8
+```
+
+If the compilation works, the packages will available in /home/rsync/rpm/release/
+
+### Debian
+
+Once connected, go in /root/builddebian and you will see a Dockerfile.
+Edit the file and change the github branch you want to build:
+
+```
+ARG release=feature/PacketFence_3.2.8
+```
+
+Once done, save and run the following command:
+
+```
+docker build . --build-arg ssh_prv_key="$(cat ./id_rsa)" --build-arg ssh_pub_key="$(cat ./id_rsa.pub)" --no-cache -t freeradius-3.2.8
+```
+
+If the compilation works, the packages will available in /home/rsync/debian/release/
+
+
