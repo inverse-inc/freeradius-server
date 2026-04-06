@@ -134,6 +134,7 @@ typedef struct rlm_rest_section_t {
 						//!< to force decoding as a particular type.
 
 	char const		*data;		//!< Custom body data (optional).
+	char const		*body_lists;	//!< Space-separated attribute list names to encode.
 
 	char const		*auth_str;	//!< The string version of the Auth-Type.
 	http_auth_type_t	auth;		//!< HTTP auth type.
@@ -201,11 +202,23 @@ typedef struct rlm_rest_t {
  */
 typedef enum {
 	READ_STATE_INIT	= 0,
+	READ_STATE_LIST_BEGIN,
 	READ_STATE_ATTR_BEGIN,
 	READ_STATE_ATTR_CONT,
 	READ_STATE_ATTR_END,
+	READ_STATE_LIST_END,
 	READ_STATE_END,
 } read_state_t;
+
+#define REST_BODY_MAX_LISTS 12
+
+typedef struct rlm_rest_multi_list_t {
+	int		count;					//!< Number of lists to encode.
+	int		current;				//!< Index of list currently being encoded.
+	pair_lists_t	lists[REST_BODY_MAX_LISTS];		//!< Which lists to encode.
+	char const	*names[REST_BODY_MAX_LISTS];		//!< String names of the lists.
+	VALUE_PAIR	**vps[REST_BODY_MAX_LISTS];		//!< Resolved VP list pointers.
+} rlm_rest_multi_list_t;
 
 /*
  *	States for the response parser
@@ -232,6 +245,8 @@ typedef struct rlm_rest_request_t {
 	rlm_rest_section_t *section;	//!< Configuration data
 
 	void			*encoder;	//!< Encoder specific data.
+
+	rlm_rest_multi_list_t	*multi;		//!< Multi-list context, NULL for legacy single-list mode.
 } rlm_rest_request_t;
 
 /*

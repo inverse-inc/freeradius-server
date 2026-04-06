@@ -65,6 +65,7 @@ static const CONF_PARSER section_config[] = {
 	{ "raw_value", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_rest_section_t, raw_value), "no" },
 	{ "base64_nonascii", FR_CONF_OFFSET(PW_TYPE_BOOLEAN, rlm_rest_section_t, base64_nonascii), "no" },
 	{ "data", FR_CONF_OFFSET(PW_TYPE_STRING | PW_TYPE_XLAT, rlm_rest_section_t, data), NULL },
+	{ "body_lists", FR_CONF_OFFSET(PW_TYPE_STRING, rlm_rest_section_t, body_lists), NULL },
 	{ "force_to", FR_CONF_OFFSET(PW_TYPE_STRING, rlm_rest_section_t, force_to_str), NULL },
 
 	/* User authentication */
@@ -857,6 +858,35 @@ static int parse_sub_section(CONF_SECTION *parent, rlm_rest_section_t *config, c
 		if (body != HTTP_BODY_UNKNOWN) {
 			config->body_str = fr_int2str(http_content_type_table, body, config->body_str);
 		}
+	}
+
+	/*
+	 *  Validate body_lists if set.
+	 */
+	if (config->body_lists) {
+		char *tmp, *token, *saveptr;
+
+		if (config->data) {
+			cf_log_err_cs(cs, "'body_lists' cannot be used together with 'data'");
+			return -1;
+		}
+
+		if (config->body != HTTP_BODY_JSON && config->body != HTTP_BODY_POST) {
+			cf_log_err_cs(cs, "'body_lists' requires body type 'json' or 'post'");
+			return -1;
+		}
+
+		tmp = talloc_strdup(config, config->body_lists);
+		for (token = strtok_r(tmp, " ", &saveptr);
+		     token != NULL;
+		     token = strtok_r(NULL, " ", &saveptr)) {
+			if (fr_str2int(pair_lists, token, PAIR_LIST_UNKNOWN) == PAIR_LIST_UNKNOWN) {
+				cf_log_err_cs(cs, "Unknown attribute list '%s' in body_lists", token);
+				talloc_free(tmp);
+				return -1;
+			}
+		}
+		talloc_free(tmp);
 	}
 
 	if (config->force_to_str) {
