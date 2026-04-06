@@ -238,6 +238,24 @@ rest {
 	#    - post-proxy: attributes from the proxy reply (request->proxy_reply->vps)
 	#  All other sections use the original request attributes (request->packet->vps).
 	#
+	#  To send multiple attribute lists in a single request, use the
+	#  "body_lists" option with space-separated list names.  This
+	#  requires body = 'json' or body = 'post'.
+	#
+	#  For JSON, attributes are nested under list-name keys:
+	#    {"request":{"User-Name":{"type":"string","value":["alice"]}},
+	#     "proxy-reply":{"Session-Timeout":{"type":"integer","value":[3600]}}}
+	#
+	#  For POST, attribute names are prefixed with the list name:
+	#    request.User-Name=alice&proxy-reply.Session-Timeout=3600
+	#
+	#  Available list names: request, reply, control, session-state,
+	#    proxy-request, proxy-reply, coa, coa-reply, disconnect,
+	#    disconnect-reply
+	#
+	#  Example:
+	#    body_lists = "request proxy-reply control"
+	#
 	pre-proxy {
 		uri = "${..connect_uri}/user/%{User-Name}/mac/%{Called-Station-ID}?action=pre-proxy"
 		method = 'post'

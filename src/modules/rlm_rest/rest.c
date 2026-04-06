@@ -584,6 +584,20 @@ static size_t rest_encode_post(void *out, size_t size, size_t nmemb, void *userd
 	while (freespace > 0) {
 		vp = fr_cursor_current(&ctx->cursor);
 		if (!vp) {
+			/*
+			 *  In multi-list mode, advance to the next list if available.
+			 */
+			if (ctx->multi) {
+				rlm_rest_multi_list_t *multi = ctx->multi;
+
+				multi->current++;
+				if (multi->current < multi->count) {
+					fr_cursor_init(&ctx->cursor, multi->vps[multi->current]);
+					ctx->state = READ_STATE_ATTR_BEGIN;
+					continue;
+				}
+			}
+
 			ctx->state = READ_STATE_END;
 
 			break;
@@ -592,20 +606,34 @@ static size_t rest_encode_post(void *out, size_t size, size_t nmemb, void *userd
 		RDEBUG2("Encoding attribute \"%s\"", vp->da->name);
 
 		if (ctx->state == READ_STATE_ATTR_BEGIN) {
-			escaped = curl_escape(vp->da->name, strlen(vp->da->name));
-			if (!escaped) {
+			char	attr_name[512];
+			char	*escaped_name;
+
+			/*
+			 *  In multi-list mode, prefix attribute name with list name.
+			 */
+			if (ctx->multi) {
+				snprintf(attr_name, sizeof(attr_name), "%s.%s",
+					 ctx->multi->names[ctx->multi->current],
+					 vp->da->name);
+				escaped_name = curl_escape(attr_name, strlen(attr_name));
+			} else {
+				escaped_name = curl_escape(vp->da->name, strlen(vp->da->name));
+			}
+
+			if (!escaped_name) {
 				REDEBUG("Failed escaping string \"%s\"", vp->da->name);
 				return 0;
 			}
 
-			len = strlen(escaped);
+			len = strlen(escaped_name);
 			if (freespace < (1 + len)) {
-				curl_free(escaped);
+				curl_free(escaped_name);
 				goto no_space;
 			}
 
-			len = sprintf(p, "%s=", escaped);
-			curl_free(escaped);
+			len = sprintf(p, "%s=", escaped_name);
+			curl_free(escaped_name);
 			p += len;
 			freespace -= len;
 
@@ -651,9 +679,27 @@ static size_t rest_encode_post(void *out, size_t size, size_t nmemb, void *userd
 		}
 
 		/*
-		 *  there are no more attributes, stop
+		 *  there are no more attributes, stop.
+		 *  In multi-list mode, check if there are more lists.
 		 */
 		if (!fr_cursor_next_peek(&ctx->cursor)) {
+			if (ctx->multi) {
+				rlm_rest_multi_list_t *multi = ctx->multi;
+
+				multi->current++;
+				if (multi->current < multi->count) {
+					fr_cursor_init(&ctx->cursor, multi->vps[multi->current]);
+
+					if (freespace < 1) goto no_space;
+					*p++ = '&';
+					freespace--;
+
+					encoded = p;
+					ctx->state = READ_STATE_ATTR_BEGIN;
+					continue;
+				}
+			}
+
 			ctx->state = READ_STATE_END;
 			break;
 		}
@@ -771,11 +817,30 @@ static size_t rest_encode_json(void *out, size_t size, size_t nmemb, void *userd
 	if (ctx->state == READ_STATE_END) return 0;
 
 	if (ctx->state == READ_STATE_INIT) {
-		ctx->state = READ_STATE_ATTR_BEGIN;
-
 		if (freespace < 1) goto no_space;
 		*p++ = '{';
 		freespace--;
+
+		if (ctx->multi) {
+			ctx->state = READ_STATE_LIST_BEGIN;
+		} else {
+			ctx->state = READ_STATE_ATTR_BEGIN;
+		}
+	}
+
+	/*
+	 *  Multi-list mode: write list name key and open brace for the list object.
+	 */
+	if (ctx->state == READ_STATE_LIST_BEGIN) {
+		rlm_rest_multi_list_t *multi = ctx->multi;
+
+		len = snprintf(p, freespace + 1, "\"%s\":{", multi->names[multi->current]);
+		if (len >= freespace) goto no_space;
+		p += len;
+		freespace -= len;
+		encoded = p;
+
+		ctx->state = READ_STATE_ATTR_BEGIN;
 	}
 
 	for (;;) {
@@ -789,6 +854,39 @@ static size_t rest_encode_json(void *out, size_t size, size_t nmemb, void *userd
 		 *  array.
 		 */
 		if (!vp && (ctx->state == READ_STATE_ATTR_BEGIN)) {
+			if (ctx->multi) {
+				rlm_rest_multi_list_t *multi = ctx->multi;
+
+				/* Close the current list object */
+				if (freespace < 1) goto no_space;
+				*p++ = '}';
+				freespace--;
+
+				multi->current++;
+
+				if (multi->current < multi->count) {
+					/* Write comma and open next list */
+					len = snprintf(p, freespace + 1, ",\"%s\":{",
+						       multi->names[multi->current]);
+					if (len >= freespace) goto no_space;
+					p += len;
+					freespace -= len;
+					encoded = p;
+
+					fr_cursor_init(&ctx->cursor, multi->vps[multi->current]);
+					ctx->state = READ_STATE_ATTR_BEGIN;
+					continue;
+				}
+
+				/* All lists done, close outer object */
+				if (freespace < 1) goto no_space;
+				*p++ = '}';
+				freespace--;
+
+				ctx->state = READ_STATE_END;
+				break;
+			}
+
 			if (freespace < 1) goto no_space;
 			*p++ = '}';
 			freespace--;
@@ -1025,6 +1123,7 @@ static void rest_request_init(REQUEST *request, rlm_rest_request_t *ctx, bool so
 	 */
 	ctx->request = request;
 	ctx->state = READ_STATE_INIT;
+	ctx->multi = NULL;
 
 	/*
 	 *	Use the appropriate attribute list based on the section.
@@ -1047,6 +1146,80 @@ static void rest_request_init(REQUEST *request, rlm_rest_request_t *ctx, bool so
 		fr_pair_list_sort(vps, fr_pair_cmp_by_da_tag);
 	}
 	fr_cursor_init(&ctx->cursor, vps);
+}
+
+/** Initialises the encoder context for multi-list mode
+ *
+ * Parses body_lists, resolves each list name to a VP pointer, and sets up
+ * the multi-list context for the streaming encoder.
+ *
+ * @param[in] request Current request.
+ * @param[in] ctx Encoder context.
+ * @param[in] sort Whether to sort each list (true for JSON).
+ * @param[in] section Section configuration (contains body_lists string).
+ * @return 0 on success, -1 on error.
+ */
+static int rest_request_init_multi(REQUEST *request, rlm_rest_request_t *ctx, bool sort,
+				   rlm_rest_section_t *section)
+{
+	rlm_rest_multi_list_t	*multi;
+	char			*tmp, *token, *saveptr;
+	int			i;
+
+	ctx->request = request;
+	ctx->state = READ_STATE_INIT;
+	ctx->multi = NULL;
+
+	multi = talloc_zero(request, rlm_rest_multi_list_t);
+	if (!multi) return -1;
+
+	tmp = talloc_strdup(multi, section->body_lists);
+
+	for (token = strtok_r(tmp, " ", &saveptr);
+	     token != NULL;
+	     token = strtok_r(NULL, " ", &saveptr)) {
+		pair_lists_t list;
+		VALUE_PAIR **vps;
+
+		if (multi->count >= REST_BODY_MAX_LISTS) {
+			RWARN("Too many lists in body_lists, ignoring remaining");
+			break;
+		}
+
+		list = fr_str2int(pair_lists, token, PAIR_LIST_UNKNOWN);
+		if (list == PAIR_LIST_UNKNOWN) {
+			RWARN("Unknown list '%s' in body_lists, skipping", token);
+			continue;
+		}
+
+		vps = radius_list(request, list);
+		if (!vps) {
+			RDEBUG2("List '%s' is not available in this context, skipping", token);
+			continue;
+		}
+
+		if (sort) {
+			fr_pair_list_sort(vps, fr_pair_cmp_by_da_tag);
+		}
+
+		multi->lists[multi->count] = list;
+		multi->names[multi->count] = token;
+		multi->vps[multi->count] = vps;
+		multi->count++;
+	}
+
+	if (multi->count == 0) {
+		RWARN("No valid attribute lists found in body_lists, sending empty body");
+		talloc_free(multi);
+		ctx->state = READ_STATE_END;
+		return 0;
+	}
+
+	multi->current = 0;
+	ctx->multi = multi;
+	fr_cursor_init(&ctx->cursor, multi->vps[0]);
+
+	return 0;
 }
 
 /** Converts plain response into a single VALUE_PAIR
@@ -2381,7 +2554,13 @@ int rest_request_config(rlm_rest_t *instance, rlm_rest_section_t *section,
 
 #ifdef HAVE_JSON
 	case HTTP_BODY_JSON:
-		rest_request_init(request, &ctx->request, true, section);
+		if (section->body_lists) {
+			if (rest_request_init_multi(request, &ctx->request, true, section) < 0) {
+				return -1;
+			}
+		} else {
+			rest_request_init(request, &ctx->request, true, section);
+		}
 
 		if (rest_request_config_body(instance, section, request, handle,
 					     rest_encode_json) < 0) {
@@ -2392,7 +2571,13 @@ int rest_request_config(rlm_rest_t *instance, rlm_rest_section_t *section,
 #endif
 
 	case HTTP_BODY_POST:
-		rest_request_init(request, &ctx->request, false, section);
+		if (section->body_lists) {
+			if (rest_request_init_multi(request, &ctx->request, false, section) < 0) {
+				return -1;
+			}
+		} else {
+			rest_request_init(request, &ctx->request, false, section);
+		}
 
 		if (rest_request_config_body(instance, section, request, handle,
 					     rest_encode_post) < 0) {
