@@ -999,13 +999,27 @@ static ssize_t rest_request_encode_wrapper(char **buffer, rest_read_t func, size
  *
  * Resets the values of a rlm_rest_request_t to their defaults.
  *
+ * The attribute list used as the source for the REST request body is selected
+ * based on the processing section:
+ *  - post-proxy: reads from the proxy reply attributes (request->proxy_reply->vps).
+ *  - pre-proxy:  reads from the proxied request attributes (request->proxy->vps).
+ *  - all others: reads from the original request attributes (request->packet->vps).
+ *
+ * This ensures that when rlm_rest is invoked in a proxy context, it encodes
+ * the correct set of attributes rather than always using the original request.
+ *
  * @param[in] request Current request.
  * @param[in] ctx to initialise.
  * @param[in] sort If true VALUE_PAIRs will be sorted within the VALUE_PAIR
  *	pointer array.
+ * @param[in] section configuration data, used to select the appropriate
+ *	attribute list (e.g. proxy-reply for post-proxy).
  */
-static void rest_request_init(REQUEST *request, rlm_rest_request_t *ctx, bool sort)
+static void rest_request_init(REQUEST *request, rlm_rest_request_t *ctx, bool sort,
+			      rlm_rest_section_t *section)
 {
+	VALUE_PAIR **vps;
+
 	/*
 	 * 	Setup stream read data
 	 */
@@ -1013,12 +1027,26 @@ static void rest_request_init(REQUEST *request, rlm_rest_request_t *ctx, bool so
 	ctx->state = READ_STATE_INIT;
 
 	/*
+	 *	Use the appropriate attribute list based on the section.
+	 */
+#ifdef WITH_PROXY
+	if (strcmp(section->name, "post-proxy") == 0 && request->proxy_reply) {
+		vps = &request->proxy_reply->vps;
+	} else if (strcmp(section->name, "pre-proxy") == 0 && request->proxy) {
+		vps = &request->proxy->vps;
+	} else
+#endif
+	{
+		vps = &request->packet->vps;
+	}
+
+	/*
 	 *	Sorts pairs in place, oh well...
 	 */
 	if (sort) {
-		fr_pair_list_sort(&request->packet->vps, fr_pair_cmp_by_da_tag);
+		fr_pair_list_sort(vps, fr_pair_cmp_by_da_tag);
 	}
-	fr_cursor_init(&ctx->cursor, &request->packet->vps);
+	fr_cursor_init(&ctx->cursor, vps);
 }
 
 /** Converts plain response into a single VALUE_PAIR
@@ -2353,7 +2381,7 @@ int rest_request_config(rlm_rest_t *instance, rlm_rest_section_t *section,
 
 #ifdef HAVE_JSON
 	case HTTP_BODY_JSON:
-		rest_request_init(request, &ctx->request, true);
+		rest_request_init(request, &ctx->request, true, section);
 
 		if (rest_request_config_body(instance, section, request, handle,
 					     rest_encode_json) < 0) {
@@ -2364,7 +2392,7 @@ int rest_request_config(rlm_rest_t *instance, rlm_rest_section_t *section,
 #endif
 
 	case HTTP_BODY_POST:
-		rest_request_init(request, &ctx->request, false);
+		rest_request_init(request, &ctx->request, false, section);
 
 		if (rest_request_config_body(instance, section, request, handle,
 					     rest_encode_post) < 0) {

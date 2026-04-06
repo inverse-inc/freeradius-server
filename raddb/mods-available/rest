@@ -232,6 +232,12 @@ rest {
 		method = 'post'
 		tls = ${..tls}
 	}
+	#  In proxy sections the attribute list used for the request body
+	#  is automatically selected based on the section:
+	#    - pre-proxy:  attributes from the proxied request (request->proxy->vps)
+	#    - post-proxy: attributes from the proxy reply (request->proxy_reply->vps)
+	#  All other sections use the original request attributes (request->packet->vps).
+	#
 	pre-proxy {
 		uri = "${..connect_uri}/user/%{User-Name}/mac/%{Called-Station-ID}?action=pre-proxy"
 		method = 'post'
