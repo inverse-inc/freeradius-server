@@ -876,7 +876,7 @@ static int parse_sub_section(CONF_SECTION *parent, rlm_rest_section_t *config, c
 			return -1;
 		}
 
-		tmp = talloc_strdup(config, config->body_lists);
+		tmp = talloc_strdup(cs, config->body_lists);
 		for (token = strtok_r(tmp, " ", &saveptr);
 		     token != NULL;
 		     token = strtok_r(NULL, " ", &saveptr)) {
