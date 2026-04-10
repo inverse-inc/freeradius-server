@@ -12,7 +12,7 @@ new file mode 100644
 index 0000000..4876ac9
 --- /dev/null
 +++ b/src/modules/rlm_raw/rlm_raw.c
-@@ -0,0 +1,361 @@
+@@ -0,0 +1,372 @@
 +/*
 + * rlm_raw.c
 + *
@@ -98,13 +98,24 @@ index 0000000..4876ac9
 +	DICT_VALUE *dv;
 +	char buf[1024];
 +	char *a = NULL;
-+	radius_packet_t *hdr = (radius_packet_t *)request->packet->data;
-+	uint8_t *ptr = hdr->data;
++	radius_packet_t *hdr;
++	uint8_t *ptr;
 +	uint8_t *subptr;
-+	int length = request->packet->data_len - RADIUS_HDR_LEN;
-+	int attrlen = ptr[1];
++	int length;
++	int attrlen;
 +	time_t t;
 +	struct tm s_tm;
++
++	if (!request->packet->data || (request->packet->data_len < RADIUS_HDR_LEN)) {
++		RDEBUG("rlm_raw: no raw packet data available");
++		*out = '\0';
++		return 0;
++	}
++
++	hdr = (radius_packet_t *)request->packet->data;
++	ptr = hdr->data;
++	length = request->packet->data_len - RADIUS_HDR_LEN;
++	attrlen = (length > 0) ? ptr[1] : 0;
 +
 +	/*
 +	 *	The "format" string is the attribute name.
