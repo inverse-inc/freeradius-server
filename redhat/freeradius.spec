@@ -58,6 +58,7 @@ Source103: freeradius-pam-conf
 Patch1: collectd.diff
 Patch2: rlm_raw.diff
 Patch3: fix.dictionary.diff
+Patch4: listen_dynamic_client_packet.diff
 
 Obsoletes: freeradius-devel
 Obsoletes: freeradius-libs
@@ -416,6 +417,7 @@ This plugin provides Kafka producer support for the FreeRADIUS server project.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
+%patch4 -p1
 # Some source files mistakenly have execute permissions set
 find $RPM_BUILD_DIR/freeradius-server-%{version} \( -name '*.c' -o -name '*.h' \) -a -perm /0111 -exec chmod a-x {} +
 

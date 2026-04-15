@@ -1,0 +1,39 @@
+--- a/src/main/listen.c
++++ b/src/main/listen.c
+@@ -282,17 +282,30 @@ RADCLIENT *client_listener_find(rad_listen_t *listener,
+ 	request->listener = listener;
+ 	request->client = client;
+
+-	request->packet = rad_alloc(request, false);
++	/*
++	 *	For UDP, peek at the datagram so the dynamic-clients
++	 *	virtual server sees the real packet contents: PacketFence's
++	 *	policy relies on %{raw:...} and packet->vps to identify
++	 *	the NAS. For TCP keep the empty allocation; rad_recv()
++	 *	can't safely peek a stream socket.
++	 */
++	if (sock->proto != IPPROTO_TCP) {
++		request->packet = rad_recv(request, listener->fd, 0x02); /* MSG_PEEK */
++	} else {
++		request->packet = rad_alloc(request, false);
++		if (request->packet) {
++			request->packet->src_ipaddr = *ipaddr;
++			request->packet->src_port = src_port;
++			request->packet->dst_ipaddr = sock->my_ipaddr;
++			request->packet->dst_port = sock->my_port;
++			request->packet->proto = sock->proto;
++		}
++	}
+ 	if (!request->packet) {				/* badly formed, etc */
+ 		talloc_free(request);
+ 		if (DEBUG_ENABLED) ERROR("Receive - %s", fr_strerror());
+ 		goto unknown;
+ 	}
+-	request->packet->src_ipaddr = *ipaddr;
+-	request->packet->src_port = src_port;
+-	request->packet->dst_ipaddr = sock->my_ipaddr;
+-	request->packet->dst_port = sock->my_port;
+-	request->packet->proto = sock->proto;
+
+ 	request->reply = rad_alloc_reply(request, request->packet);
+ 	if (!request->reply) {
