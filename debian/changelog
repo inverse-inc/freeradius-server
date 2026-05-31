@@ -1,3 +1,17 @@
+freeradius (4:3.2.8-1) unstable; urgency=medium
+
+  * Update NAS-Filter-Rule encoder: each rule gets its own trailing 0x00
+    separator, keeping every wire attribute self-contained for compatibility
+    with both RFC 4849 concatenation (Arista) and per-attribute parsers
+    (FortiSwitch).  Also fixes an out-of-bounds read in the decoder.
+  * Fix rlm_raw in dynamic-clients virtual server on PacketFence 3.2.8.
+  * Fix NULL pointer dereference in rlm_raw xlat expansion.
+  * Fix talloc crash in rlm_rest body_lists validation.
+  * Add multi-attribute-list support (body_lists) to rlm_rest.
+  * Fix rlm_rest to use correct attribute list in proxy sections.
+
+ -- Durand Fabrice <oeufdure@gmail.com>  Sat, 30 May 2026 12:00:00 -0400
+
 freeradius (4:3.2.8+git) unstable; urgency=medium
 
   * New upstream version.
