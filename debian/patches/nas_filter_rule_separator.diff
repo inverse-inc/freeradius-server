@@ -1,31 +1,135 @@
-Description: NAS-Filter-Rule: preserve the 0x00 rule separator across the
- 253-byte attribute boundary so a downstream FreeRADIUS does not merge the
- last two rules.  Keeps whole-rule-per-attribute packing (equipment compat).
- Also fixes an out-of-bounds read in the decoder return value, and updates
- the rfc4849 unit-test vectors to match.
+Description: NAS-Filter-Rule: write each rule with a trailing 0x00 separator
+ to keep every wire attribute self-contained.  This is compatible with
+ both RFC 4849 concatenation (used by Arista) and per-attribute parsers
+ (used by FortiSwitch, which requires each NAS-Filter-Rule attribute to
+ contain only complete rules).
+ .
+ In the pathological case of a rule >= 253 bytes the trailing separator
+ does not fit; a pending separator is carried to the next attribute.
+ .
+ Also fixes an out-of-bounds read in the decoder return value, and
+ updates the rfc4849 unit-test vectors to match the new encoding.
 Author: Durand Fabrice
 ---
 diff --git a/src/lib/radius.c b/src/lib/radius.c
-index 9e25f79abb..124e4b77af 100644
+index 9e25f79abb..46258079ff 100644
 --- a/src/lib/radius.c
 +++ b/src/lib/radius.c
-@@ -1691,7 +1691,14 @@ int rad_vp2rfc(RADIUS_PACKET const *packet,
- 				attr[0] = PW_NAS_FILTER_RULE;
- 				attr[1] = 2;
- 				p = attr + 2;
--				zero = false;
-+				/*
-+				 *	Do NOT reset "zero" here.  A
-+				 *	separator is still pending between
-+				 *	the previous rule and this one; it
-+				 *	must be written as the first byte
-+				 *	of the new attribute so the decoder
-+				 *	doesn't merge the two rules.
-+				 */
+@@ -1645,7 +1645,6 @@
+ 	if (vp->da->attr == PW_NAS_FILTER_RULE) {
+ 		uint8_t const *end = ptr + room;
+ 		uint8_t *p, *attr = ptr;
+-		bool zero = false;
+ 		uint8_t rule_buffer[1024] = {0};
+ 		size_t rule_len = 0;
+ 		VALUE_PAIR *current = vp;
+@@ -1668,6 +1667,8 @@
+ 		attr[1] = 2;
+ 		p = ptr + 2;
+ 
++		bool pending_sep = false;
++
+ 		size_t offset = 0;
+ 		while (offset < rule_len) {
+ 			size_t rule_start = offset;
+@@ -1683,28 +1684,82 @@
  			}
  
- 			if (zero) {
-@@ -3290,7 +3297,7 @@ static ssize_t data2vp_nas_filter_rule(TALLOC_CTX *ctx,
+ 			size_t space_left = 255 - attr[1];
+-			if (space_left < this_rule_len + (zero ? 1 : 0)) {
+-				attr = p;
+-				if ((attr + 2) >= end) {
+-					break;				}
+-
+-				attr[0] = PW_NAS_FILTER_RULE;
+-				attr[1] = 2;
+-				p = attr + 2;
+-				zero = false;
+-			}
+ 
+-			if (zero) {
+-				*(p++) = 0;
+-				attr[1]++;
++			/*
++			 *	Each rule is written with a trailing
++			 *	0x00 separator.  This keeps every wire
++			 *	attribute self-contained, which is
++			 *	compatible with both RFC 4849
++			 *	concatenation (Arista) and per-attribute
++			 *	parsers (FortiSwitch).
++			 */
++			size_t needed = this_rule_len + 1;
++
++			if (space_left < needed) {
++				/*
++				 *	Rule (with trailing \0) doesn't
++				 *	fit in the current attribute.
++				 */
++				if (attr[1] > 2) {
++					/*
++					 *	Attribute has content; start
++					 *	a new one so the rule stays
++					 *	whole.
++					 */
++					attr = p;
++					if ((attr + 2) >= end) {
++						break;
++					}
++
++					attr[0] = PW_NAS_FILTER_RULE;
++					attr[1] = 2;
++					p = attr + 2;
++
++					/*
++					 *	If a giant rule filled the
++					 *	previous attribute without
++					 *	a trailing \0, write the
++					 *	pending separator now.
++					 */
++					if (pending_sep) {
++						*(p++) = 0;
++						attr[1]++;
++						pending_sep = false;
++					}
++
++					space_left = 255 - attr[1];
++				}
++
++				/*
++				 *	Rule is >= 253 bytes — the
++				 *	trailing \0 genuinely doesn't
++				 *	fit even in a fresh attribute.
++				 *	Degrade: write without it.
++				 */
++				if (space_left < needed) {
++					needed = this_rule_len;
++				}
+ 			}
+ 
+ 			memcpy(p, rule_buffer + rule_start, this_rule_len);
+ 			p += this_rule_len;
+ 			attr[1] += this_rule_len;
+ 
++			/*
++			 *	Write the trailing \0 separator
++			 *	when there is room.  Otherwise flag
++			 *	a pending separator for the next
++			 *	attribute (giant rule edge case).
++			 */
++			if (needed > this_rule_len) {
++				*(p++) = 0;
++				attr[1]++;
++				pending_sep = false;
++			} else {
++				pending_sep = true;
++			}
++
+ 			offset = next_rule + 1;
+-			zero = true;
+ 		}
+ 
+ 		*pvp = current;
+@@ -3290,7 +3345,7 @@
  		attr = attr_end;
  	}
  
@@ -35,35 +139,58 @@ index 9e25f79abb..124e4b77af 100644
  	vp = fr_pair_afrom_da(ctx, da);
  	if (!vp) {
 diff --git a/src/tests/unit/rfc4849.txt b/src/tests/unit/rfc4849.txt
-index 957a9e9579..465651d1b7 100644
+index 957a9e9579..0d0e450f56 100644
 --- a/src/tests/unit/rfc4849.txt
 +++ b/src/tests/unit/rfc4849.txt
-@@ -2,7 +2,9 @@
+diff --git a/src/tests/unit/rfc4849.txt b/src/tests/unit/rfc4849.txt
+index 957a9e9579..0d0e450f56 100644
+--- a/src/tests/unit/rfc4849.txt
++++ b/src/tests/unit/rfc4849.txt
+@@ -2,48 +2,67 @@
  #  RFC 4849 NAS-Filter-Rule
  #
  #  Individual rules are packed together as with EAP-Message,
 -#  but the rules are separated by a 0x00 byte.
-+#  but the rules are separated by a 0x00 byte.  Rules are never
-+#  split across an attribute boundary; a pending separator is
-+#  carried to the start of the next attribute.
++#  but the rules are separated by a 0x00 byte.  Each rule is
++#  written with a trailing 0x00 separator, keeping every wire
++#  attribute self-contained for compatibility with both
++#  RFC 4849 concatenation and per-attribute parsers.
  #
  encode NAS-Filter-Rule = "hello"
- data 5c 07 68 65 6c 6c 6f
-@@ -24,19 +26,21 @@ decode -
+-data 5c 07 68 65 6c 6c 6f
++data 5c 08 68 65 6c 6c 6f 00
+ 
+ decode -
+ data NAS-Filter-Rule = "hello"
+ 
+ 
+ encode NAS-Filter-Rule = "hello", NAS-Filter-Rule += "bob"
+-data 5c 0b 68 65 6c 6c 6f 00 62 6f 62
++data 5c 0c 68 65 6c 6c 6f 00 62 6f 62 00
+ 
+ decode -
+ data NAS-Filter-Rule = "hello", NAS-Filter-Rule = "bob"
+ 
+ encode NAS-Filter-Rule = "hello", NAS-Filter-Rule += "bob", NAS-Filter-Rule += "stuff"
+-data 5c 11 68 65 6c 6c 6f 00 62 6f 62 00 73 74 75 66 66
++data 5c 12 68 65 6c 6c 6f 00 62 6f 62 00 73 74 75 66 66 00
+ 
+ decode -
  data NAS-Filter-Rule = "hello", NAS-Filter-Rule = "bob", NAS-Filter-Rule = "stuff"
  
  #
 -#  And large amounts of data
-+#  And large amounts of data.  Rules are kept whole (never split
-+#  across attributes); the 0x00 separator is preserved across the
-+#  253-byte boundary.
++#  And large amounts of data.  Each rule keeps its trailing 0x00
++#  separator, staying whole within an attribute.  The only exception
++#  is a rule >= 253 bytes, which leaves the 0x00 pending for the
++#  next attribute (pathological edge case).
  #
  
 -# 250x and then space (to tell where the 'x' ends
 +# 250x and then space (to tell where the 'x' ends)
  encode NAS-Filter-Rule = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ", NAS-Filter-Rule += "bob"
 -data 5c ff 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 20 00 62 5c 04 6f 62
-+data 5c fd 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 20 5c 06 00 62 6f 62
++data 5c fe 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 20 00 5c 06 62 6f 62 00
  
  decode -
  data NAS-Filter-Rule = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ", NAS-Filter-Rule = "bob"
@@ -71,23 +198,28 @@ index 957a9e9579..465651d1b7 100644
  # 251x + ' '
  encode NAS-Filter-Rule = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ", NAS-Filter-Rule += "bob"
 -data 5c ff 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 20 00 5c 05 62 6f 62
-+data 5c fe 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 20 5c 06 00 62 6f 62
++data 5c ff 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 20 00 5c 06 62 6f 62 00
  
  decode -
  data NAS-Filter-Rule = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ", NAS-Filter-Rule = "bob"
-@@ -47,3 +51,15 @@ data 5c ff 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78
+ 
+ # 252x + ' '
+ encode NAS-Filter-Rule = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ", NAS-Filter-Rule += "bob"
+-data 5c ff 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 20 5c 06 00 62 6f 62
++data 5c ff 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 20 5c 09 00 62 6f 62 00
  
  decode -
  data NAS-Filter-Rule = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ", NAS-Filter-Rule = "bob"
 +
 +#
 +#  Several short rules whose 0x00-separated stream crosses the
-+#  253-byte boundary.  Regression for the separator being dropped
-+#  at the boundary (which merged the last two rules).
++#  253-byte boundary.  Regression test: each rule carries its
++#  trailing 0x00, keeping attributes self-contained and
++#  compatible with both RFC 4849 concatenation and per-attribute
++#  parsers (FortiSwitch).
 +#
 +encode NAS-Filter-Rule = "permit in udp from any to 8.8.8.8/32 53", NAS-Filter-Rule += "permit in tcp from any to 8.8.8.8/32 53", NAS-Filter-Rule += "permit in udp from any to 8.8.4.4/32 53", NAS-Filter-Rule += "permit in tcp from any to 8.8.4.4/32 53", NAS-Filter-Rule += "permit in udp from any to any 67", NAS-Filter-Rule += "permit in udp from any to any 68", NAS-Filter-Rule += "permit in ip from any to any"
-+data 5c e3 70 65 72 6d 69 74 20 69 6e 20 75 64 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 38 2e 38 2e 38 2e 38 2f 33 32 20 35 33 00 70 65 72 6d 69 74 20 69 6e 20 74 63 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 38 2e 38 2e 38 2e 38 2f 33 32 20 35 33 00 70 65 72 6d 69 74 20 69 6e 20 75 64 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 38 2e 38 2e 34 2e 34 2f 33 32 20 35 33 00 70 65 72 6d 69 74 20 69 6e 20 74 63 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 38 2e 38 2e 34 2e 34 2f 33 32 20 35 33 00 70 65 72 6d 69 74 20 69 6e 20 75 64 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 61 6e 79 20 36 37 00 70 65 72 6d 69 74 20 69 6e 20 75 64 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 61 6e 79 20 36 38 5c 1f 00 70 65 72 6d 69 74 20 69 6e 20 69 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 61 6e 79
++data 5c e4 70 65 72 6d 69 74 20 69 6e 20 75 64 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 38 2e 38 2e 38 2e 38 2f 33 32 20 35 33 00 70 65 72 6d 69 74 20 69 6e 20 74 63 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 38 2e 38 2e 38 2e 38 2f 33 32 20 35 33 00 70 65 72 6d 69 74 20 69 6e 20 75 64 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 38 2e 38 2e 34 2e 34 2f 33 32 20 35 33 00 70 65 72 6d 69 74 20 69 6e 20 74 63 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 38 2e 38 2e 34 2e 34 2f 33 32 20 35 33 00 70 65 72 6d 69 74 20 69 6e 20 75 64 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 61 6e 79 20 36 37 00 70 65 72 6d 69 74 20 69 6e 20 75 64 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 61 6e 79 20 36 38 00 5c 1f 70 65 72 6d 69 74 20 69 6e 20 69 70 20 66 72 6f 6d 20 61 6e 79 20 74 6f 20 61 6e 79 00
 +
 +decode -
 +data NAS-Filter-Rule = "permit in udp from any to 8.8.8.8/32 53", NAS-Filter-Rule = "permit in tcp from any to 8.8.8.8/32 53", NAS-Filter-Rule = "permit in udp from any to 8.8.4.4/32 53", NAS-Filter-Rule = "permit in tcp from any to 8.8.4.4/32 53", NAS-Filter-Rule = "permit in udp from any to any 67", NAS-Filter-Rule = "permit in udp from any to any 68", NAS-Filter-Rule = "permit in ip from any to any"
-+
