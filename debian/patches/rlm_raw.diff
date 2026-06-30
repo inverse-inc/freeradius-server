@@ -12,7 +12,7 @@ new file mode 100644
 index 0000000..4876ac9
 --- /dev/null
 +++ b/src/modules/rlm_raw/rlm_raw.c
-@@ -0,0 +1,372 @@
+@@ -0,0 +1,380 @@
 +/*
 + * rlm_raw.c
 + *
@@ -126,6 +126,14 @@ index 0000000..4876ac9
 +	attr = da->attr;
 +	type = da->type;
 +	flags = da->flags;
++
++	/*
++	 *	VSAs are matched below as (vendor << 16) | attr, but da->attr
++	 *	holds only the bare attribute number.  Fold the vendor in (same
++	 *	16-bit vendor limit as the walk) or %{raw:<VSA>} never matches.
++	 */
++	if (da->vendor && da->vendor <= 65535)
++		attr |= (da->vendor << 16);
 +
 +	while (length > 0) {
 +		if (vendorlen > 0) {
