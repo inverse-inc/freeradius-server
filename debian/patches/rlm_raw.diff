@@ -236,7 +236,7 @@ index 0000000..4876ac9
 +			if (attribute == PW_NAS_PORT)
 +				a = (char *)strvalue;
 +			else {
-+                fr_prints(buf, sizeof(buf), strvalue, attrlen, 0);
++                fr_prints(buf, sizeof(buf), (char *)strvalue, attrlen, 0);
 +				a = buf;
 +			}
 +			break;
