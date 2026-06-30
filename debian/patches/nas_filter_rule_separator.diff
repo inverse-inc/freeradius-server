@@ -129,15 +129,6 @@ index 9e25f79abb..46258079ff 100644
  		}
  
  		*pvp = current;
-@@ -3290,7 +3345,7 @@
- 		attr = attr_end;
- 	}
- 
--	if (q == buffer) return attr + attr[2] - start;
-+	if (q == buffer) return attr - start;
- 
- 	vp = fr_pair_afrom_da(ctx, da);
- 	if (!vp) {
 diff --git a/src/tests/unit/rfc4849.txt b/src/tests/unit/rfc4849.txt
 index 957a9e9579..0d0e450f56 100644
 --- a/src/tests/unit/rfc4849.txt
