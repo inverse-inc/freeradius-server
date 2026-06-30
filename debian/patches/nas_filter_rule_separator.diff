@@ -15,14 +15,17 @@ diff --git a/src/lib/radius.c b/src/lib/radius.c
 index 9e25f79abb..46258079ff 100644
 --- a/src/lib/radius.c
 +++ b/src/lib/radius.c
-@@ -1645,7 +1645,6 @@
+@@ -1645,9 +1645,8 @@
  	if (vp->da->attr == PW_NAS_FILTER_RULE) {
  		uint8_t const *end = ptr + room;
  		uint8_t *p, *attr = ptr;
 -		bool zero = false;
  		uint8_t rule_buffer[1024] = {0};
  		size_t rule_len = 0;
- 		VALUE_PAIR *current = vp;
+-		VALUE_PAIR *current = vp;
++		VALUE_PAIR const *current = vp;
+
+ 		while (current && !current->da->vendor && (current->da->attr == PW_NAS_FILTER_RULE)) {
 @@ -1668,6 +1667,8 @@
  		attr[1] = 2;
  		p = ptr + 2;
