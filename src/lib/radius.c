@@ -1652,74 +1652,57 @@ int rad_vp2rfc(RADIUS_PACKET *packet,
 	}
 
 	/*
-	 *	Hacks for NAS-Filter-Rule.  They all get concatenated
-	 *	with 0x00 bytes in between the values.  We rely on the
-	 *	decoder to do the opposite transformation on incoming
-	 *	packets.
+	 *	Hacks for NAS-Filter-Rule.  Each rule goes in its own
+	 *	attribute, terminated by a 0x00 byte.  Receivers which
+	 *	concatenate the attributes and split on 0x00 (RFC 4849)
+	 *	still see the same rules, and receivers which read one
+	 *	rule per attribute (e.g. FortiSwitch, which rejects
+	 *	attributes longer than 80 bytes) see one rule each.
+	 *	Values containing 0x00 bytes are split into one rule per
+	 *	segment.  We rely on the decoder to do the opposite
+	 *	transformation on incoming packets.
 	 */
 	if (vp->da->attr == PW_NAS_FILTER_RULE) {
 		uint8_t const *end = ptr + room;
-		uint8_t *p, *attr = ptr;
-		bool zero = false;
-		uint8_t rule_buffer[1024] = {0};
-		size_t rule_len = 0;
-		VALUE_PAIR *current = vp;
+		uint8_t *p = ptr;
+		VALUE_PAIR const *current = vp;
+		bool full = false;
 
 		while (current && !current->da->vendor && (current->da->attr == PW_NAS_FILTER_RULE)) {
-			if ((rule_len + current->vp_length + 1) >= sizeof(rule_buffer)) {
-				break;
+			uint8_t const *rule = current->vp_octets;
+			size_t left = current->vp_length;
+
+			while (!full && (left > 0)) {
+				uint8_t const *nul = memchr(rule, 0, left);
+				size_t rule_len = nul ? (size_t)(nul - rule) : left;
+
+				/*
+				 *	Skip empty rules, and rules which can't
+				 *	fit in one attribute with their 0x00.
+				 */
+				if ((rule_len > 0) && (rule_len <= 252)) {
+					if ((p + 2 + rule_len + 1) > end) {
+						full = true;
+						break;
+					}
+
+					p[0] = PW_NAS_FILTER_RULE;
+					p[1] = 2 + rule_len + 1;
+					memcpy(p + 2, rule, rule_len);
+					p[2 + rule_len] = 0;
+					p += p[1];
+				}
+
+				if (!nul) break;
+				left -= rule_len + 1;
+				rule = nul + 1;
 			}
 
-			if (rule_len > 0) {
-				rule_buffer[rule_len++] = 0;
-			}
-			memcpy(rule_buffer + rule_len, current->vp_octets, current->vp_length);
-			rule_len += current->vp_length;
-
+			/*
+			 *	When the packet is full, the remaining rules
+			 *	are dropped, as with the previous encoding.
+			 */
 			current = current->next;
-		}
-
-		attr[0] = PW_NAS_FILTER_RULE;
-		attr[1] = 2;
-		p = ptr + 2;
-
-		size_t offset = 0;
-		while (offset < rule_len) {
-			size_t rule_start = offset;
-			size_t next_rule = rule_start;
-			while (next_rule < rule_len && rule_buffer[next_rule] != 0) {
-				next_rule++;
-			}
-
-			size_t this_rule_len = next_rule - rule_start;
-			if (this_rule_len == 0) {
-				offset = next_rule + 1;
-				continue;
-			}
-
-			size_t space_left = 255 - attr[1];
-			if (space_left < this_rule_len + (zero ? 1 : 0)) {
-				attr = p;
-				if ((attr + 2) >= end) {
-					break;				}
-
-				attr[0] = PW_NAS_FILTER_RULE;
-				attr[1] = 2;
-				p = attr + 2;
-				zero = false;
-			}
-
-			if (zero) {
-				*(p++) = 0;
-				attr[1]++;
-			}
-
-			memcpy(p, rule_buffer + rule_start, this_rule_len);
-			p += this_rule_len;
-			attr[1] += this_rule_len;
-
-			offset = next_rule + 1;
-			zero = true;
 		}
 
 		*pvp = current;
