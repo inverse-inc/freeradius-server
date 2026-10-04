@@ -191,7 +191,19 @@ char *fr_json_from_string(TALLOC_CTX *ctx, char const *s, bool include_quotes)
 	json = json_object_new_string(s);
 	if (!json) return NULL;
 
+	/*
+	 *	The value is escaped twice: here, and when the whole
+	 *	object is printed. The xlat engine unescapes the output
+	 *	once when it is nested in another xlat, %{base64:...}
+	 *	for instance, which undoes the extra \\ \" \n escapes.
+	 *	It does not know \/, so an escaped "/" would reach the
+	 *	consumer as "\/". "/" never needs escaping in JSON.
+	 */
+#ifdef JSON_C_TO_STRING_NOSLASHESCAPE
+	if ((p = json_object_to_json_string_ext(json, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE))) {
+#else
 	if ((p = json_object_to_json_string(json))) {
+#endif
 		if (include_quotes) {
 			out = talloc_typed_strdup(ctx, p);
 		} else {
